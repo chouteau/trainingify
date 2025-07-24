@@ -1,0 +1,48 @@
+parameters:
+  - name: environment
+    displayName: 'Environment (staging/production)'
+    type: string
+    default: 'staging'
+    values:
+      - 'staging'
+      - 'production'
+
+trigger: none
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Debug'
+  dotnetVersion: 'net8.0'
+      
+steps:
+
+- task: NuGetToolInstaller@1
+
+- task: NuGetCommand@2
+  displayName: 'nuget restore'
+  inputs:
+    restoreSolution: '$(solution)'
+    feedsToUse: 'select'
+    vstsFeed: 'appliman'
+    nuGetFeedType: 'internal'
+    includeNuGetOrg: true
+
+- task: DotNetCoreCLI@2
+  displayName: 'Build DeployToClustiis'
+  inputs:
+    command: 'build'
+    projects: '**\DeployToClustiis.csproj'
+    arguments: '--configuration $(buildConfiguration)'
+
+- task: CmdLine@2
+  displayName: Deploy To ClustIIS
+  condition: succeeded()
+  inputs:    
+    workingDirectory : '$(System.DefaultWorkingDirectory)'
+    script: |
+        cd $(System.DefaultWorkingDirectory)\src\Tools\DeployToClustiis\bin\Debug\net8.0\
+        DeployToClustiis.exe --env ${{parameters.environment}} --wd $(System.DefaultWorkingDirectory)
