@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices.WindowsRuntime;
+using System.Runtime.InteropServices.WindowsRuntime;
 
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Advertisement;
@@ -144,23 +144,73 @@ class Program
 	// Gestionnaire pour les notifications Indoor Bike Data. Décodage minimal des drapeaux
 	static void IndoorBikeData_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
 	{
+		if (args.CharacteristicValue.Length < 2) return;
+
 		var reader = DataReader.FromBuffer(args.CharacteristicValue);
-		byte flag0 = reader.ReadByte();
-		byte flag1 = reader.ReadByte();
-		// Bit 0 : cadence instantanée présente ; Bit 2 : puissance instantanée présente
-		bool cadencePresent = (flag0 & 0x01) != 0;
-		bool powerPresent = (flag0 & 0x04) != 0;
-		// Ignorer d'autres champs selon la spécification
-		if (cadencePresent)
+		reader.ByteOrder = ByteOrder.LittleEndian;
+		ushort flags = reader.ReadUInt16();
+
+		// Bit 0: More Data (0 = Instantaneous Speed present)
+		double speed = 0;
+		if ((flags & (1 << 0)) == 0)
 		{
-			ushort cadence = reader.ReadUInt16();
-			Console.Write($"Cadence : {cadence} rpm ");
+			if (reader.UnconsumedBufferLength >= 2)
+			{
+				speed = reader.ReadUInt16() * 0.01;
+			}
 		}
-		if (powerPresent)
+
+		// Bit 1: Average Speed present (uint16)
+		if ((flags & (1 << 1)) != 0)
 		{
-			ushort power = reader.ReadUInt16();
-			Console.Write($"Puissance : {power / 1000.0} W");
+			if (reader.UnconsumedBufferLength >= 2) reader.ReadUInt16();
 		}
+
+		// Bit 2: Instantaneous Cadence present (uint16, 0.5 rpm)
+		double cadence = 0;
+		if ((flags & (1 << 2)) != 0)
+		{
+			if (reader.UnconsumedBufferLength >= 2)
+			{
+				cadence = reader.ReadUInt16() * 0.5;
+				Console.Write($"Cadence : {cadence} rpm ");
+			}
+		}
+
+		// Bit 3: Average Cadence present (uint16)
+		if ((flags & (1 << 3)) != 0)
+		{
+			if (reader.UnconsumedBufferLength >= 2) reader.ReadUInt16();
+		}
+
+		// Bit 4: Total Distance present (uint24)
+		if ((flags & (1 << 4)) != 0)
+		{
+			if (reader.UnconsumedBufferLength >= 3)
+			{
+				reader.ReadByte();
+				reader.ReadByte();
+				reader.ReadByte();
+			}
+		}
+
+		// Bit 5: Resistance Level present (sint16)
+		if ((flags & (1 << 5)) != 0)
+		{
+			if (reader.UnconsumedBufferLength >= 2) reader.ReadInt16();
+		}
+
+		// Bit 6: Instantaneous Power present (sint16, 1 W)
+		short power = 0;
+		if ((flags & (1 << 6)) != 0)
+		{
+			if (reader.UnconsumedBufferLength >= 2)
+			{
+				power = reader.ReadInt16();
+				Console.Write($"Puissance : {power} W ");
+			}
+		}
+
 		Console.WriteLine();
 	}
 

@@ -68,10 +68,15 @@
                             @(StateService.GetDeviceProtocol("Controllable", StateService.SelectedControllableId))
                         </span>
                         <span>Pwr: @StateService.Power W | Cad: @StateService.Cadence rpm | Spd: @StateService.Speed km/h</span>
+                        <div class="alert alert-info mt-2 p-2 border border-info bg-dark text-info" style="font-size: 11px; font-family: monospace; word-break: break-all; border-radius: 8px;">
+                            <strong>TRAME BLUETOOTH REÇUE :</strong><br/>
+                            @StateService.ControllableConnectionStatus
+                        </div>
                     }
                     else
                     {
                         <span>Déconnecté</span>
+                        <div class="text-secondary mt-1" style="font-size: 10px;">Statut : @StateService.ControllableConnectionStatus</div>
                     }
                 </div>
                 <!-- Selection Dropdown -->
@@ -103,10 +108,15 @@
                             @(StateService.GetDeviceProtocol("HRM", StateService.SelectedHrmId))
                         </span>
                         <span>Hr: @StateService.HeartRate bpm</span>
+                        <div class="alert alert-info mt-2 p-2 border border-info bg-dark text-info" style="font-size: 11px; font-family: monospace; word-break: break-all; border-radius: 8px;">
+                            <strong>TRAME BLUETOOTH REÇUE :</strong><br/>
+                            @StateService.HrmConnectionStatus
+                        </div>
                     }
                     else
                     {
                         <span>Déconnecté</span>
+                        <div class="text-secondary mt-1" style="font-size: 10px;">Statut : @StateService.HrmConnectionStatus</div>
                     }
                 </div>
                 <!-- Selection Dropdown -->

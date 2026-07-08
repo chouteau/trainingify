@@ -64,51 +64,86 @@ window.VelodromifyBLE = {
 
     handleFTMSData: function (event) {
         const value = event.target.value;
-        // Parse FTMS Indoor Bike Data
-        // Flags: 2 bytes
+        if (value.byteLength < 2) return;
+
         const flags = value.getUint16(0, true);
         let offset = 2;
 
-        // Bit 0: More Data (ignored for now)
-        // Bit 1: Average Speed present (if 0, Instant Speed is present)
-        // Bit 2: Instant Cadence present
-        // Bit 3: Average Cadence present
-        // Bit 4: Total Distance present
-        // ...
-        // Bit 6: Instant Power present
-        
-        // Speed (Km/h) - Uint16, 0.01 resolution
-        const speed = value.getUint16(offset, true) * 0.01;
-        offset += 2;
-        
-        // If Cadence present (Bit 2)
-        let cadence = 0;
-        if (flags & (1 << 2)) {
-            cadence = value.getUint16(offset, true) * 0.5;
+        // Bit 0: More Data (0 = Instantaneous Speed present)
+        let speed = 0;
+        if ((flags & (1 << 0)) === 0) {
+            if (offset + 2 <= value.byteLength) {
+                speed = value.getUint16(offset, true) * 0.01;
+                offset += 2;
+            }
+        }
+
+        // Bit 1: Average Speed present (uint16)
+        if (flags & (1 << 1)) {
             offset += 2;
         }
 
-        // If Power present (Bit 6)
-        // Need to check other bits to calculate offset correctly if they are present
-        // This is a simplified parser. A robust one needs to check all flag bits.
-        // Let's assume standard order: Speed, Cadence, Distance, Resistance, Power, HeartRate
-        
-        // For now, let's just send what we have.
-        // Ideally we should implement full parsing logic.
-        
-        // Let's try to find Power.
-        // Distance (Bit 4) - Uint24
+        // Bit 2: Instantaneous Cadence present (uint16)
+        let cadence = 0;
+        if (flags & (1 << 2)) {
+            if (offset + 2 <= value.byteLength) {
+                cadence = value.getUint16(offset, true) * 0.5;
+                offset += 2;
+            }
+        }
+
+        // Bit 3: Average Cadence present (uint16)
+        if (flags & (1 << 3)) {
+            offset += 2;
+        }
+
+        // Bit 4: Total Distance present (uint24)
         if (flags & (1 << 4)) {
             offset += 3;
         }
-        // Resistance (Bit 5) - Int16
+
+        // Bit 5: Resistance Level present (sint16)
         if (flags & (1 << 5)) {
             offset += 2;
         }
-        
+
+        // Bit 6: Instantaneous Power present (sint16)
         let power = 0;
         if (flags & (1 << 6)) {
-            power = value.getInt16(offset, true);
+            if (offset + 2 <= value.byteLength) {
+                power = value.getInt16(offset, true);
+                offset += 2;
+            }
+        }
+
+        // Bit 7: Average Power present (sint16)
+        if (flags & (1 << 7)) {
+            offset += 2;
+        }
+
+        // Bit 8: Expended Energy present (Total: uint16, Per Hour: uint16, Per Minute: uint8)
+        if (flags & (1 << 8)) {
+            offset += 5;
+        }
+
+        // Bit 9: Heart Rate present (uint8)
+        if (flags & (1 << 9)) {
+            offset += 1;
+        }
+
+        // Bit 10: Metabolic Equivalent present (uint8)
+        if (flags & (1 << 10)) {
+            offset += 1;
+        }
+
+        // Bit 11: Elapsed Time present (uint16)
+        if (flags & (1 << 11)) {
+            offset += 2;
+        }
+
+        // Bit 12: Remaining Time present (uint16)
+        if (flags & (1 << 12)) {
+            offset += 2;
         }
 
         this.dotnetRef.invokeMethodAsync('UpdateRideData', speed, power, cadence);
