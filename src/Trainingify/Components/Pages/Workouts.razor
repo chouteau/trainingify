@@ -1,0 +1,113 @@
+@page "/workouts"
+@inject Trainingify.Services.TrainingStateService StateService
+@implements IDisposable
+
+<PageTitle>Trainingify - Structured Workouts</PageTitle>
+
+<div class="app-header">
+    <h1 class="app-title">Workouts</h1>
+    <div class="status-indicators">
+        <div class="indicator">
+            <span class="bi bi-journal-text"></span>
+            <span>@StateService.AvailableWorkouts.Count entraînement(s)</span>
+        </div>
+    </div>
+</div>
+
+<div class="workouts-container">
+    @foreach (var workout in StateService.AvailableWorkouts)
+    {
+        <div class="workout-item @(StateService.ActiveWorkout?.Id == workout.Id ? "active" : "")" 
+             @onclick="() => SelectWorkout(workout)">
+            <div class="workout-left">
+                <span class="workout-name">@workout.Name</span>
+                <span class="workout-meta">@workout.DurationMinutes min | <span class="workout-badge @GetBadgeClass(workout.Type)">@workout.Type</span></span>
+            </div>
+            <div class="workout-select-dot"></div>
+        </div>
+    }
+</div>
+
+@if (StateService.ActiveWorkout != null)
+{
+    <div class="profile-chart-card mt-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-bold">Intensité du Profil : @StateService.ActiveWorkout.Name</span>
+            <span class="text-muted" style="font-size: 11px;">@StateService.ActiveWorkout.DurationMinutes min</span>
+        </div>
+        
+        <!-- Bar Chart Representation -->
+        <div class="profile-bar-chart">
+            @foreach (var target in StateService.WorkoutIntensityProfile)
+            {
+                <div class="profile-bar" 
+                     style="height: @(GetBarHeight(target))%; background-color: @(GetBarColor(target));"
+                     title="Target: @(target)W">
+                </div>
+            }
+        </div>
+        
+        <!-- Zone Legend -->
+        <div class="d-flex justify-content-between mt-2" style="font-size: 10px; color: var(--text-muted);">
+            <span>Recup (Bleu)</span>
+            <span>Endur (Vert)</span>
+            <span>Tempo (Jaune)</span>
+            <span>Seuil (Orange)</span>
+            <span>VO2 (Rouge)</span>
+        </div>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        StateService.OnStateChanged += HandleStateChanged;
+    }
+
+    private void HandleStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void SelectWorkout(Workout workout)
+    {
+        StateService.SelectWorkout(workout);
+    }
+
+    private string GetBadgeClass(string type)
+    {
+        return type.ToLower() switch
+        {
+            "vo2max" => "badge-vo2",
+            "threshold" => "badge-threshold",
+            "test" => "badge-test",
+            "base" => "badge-base",
+            _ => "badge-base"
+        };
+    }
+
+    private double GetBarHeight(int targetPower)
+    {
+        // scale to 0-350 Watts
+        return Math.Clamp((targetPower / 350.0) * 100.0, 10.0, 100.0);
+    }
+
+    private string GetBarColor(int targetPower)
+    {
+        var ftp = StateService.Profile.Ftp;
+        if (ftp <= 0) ftp = 250;
+
+        var ratio = targetPower / ftp;
+
+        if (ratio < 0.55) return "var(--accent-blue)";     // Zone 1 Active Recovery
+        if (ratio < 0.75) return "var(--accent-green)";    // Zone 2 Endurance
+        if (ratio < 0.90) return "var(--accent-yellow)";   // Zone 3 Tempo
+        if (ratio < 1.05) return "var(--accent-orange)";   // Zone 4 Threshold
+        return "var(--accent-red)";                        // Zone 5 VO2Max
+    }
+
+    public void Dispose()
+    {
+        StateService.OnStateChanged -= HandleStateChanged;
+    }
+}

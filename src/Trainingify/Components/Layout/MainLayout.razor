@@ -1,0 +1,116 @@
+@inherits LayoutComponentBase
+@inject Trainingify.Services.TrainingStateService StateService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<div class="app-container">
+    <div class="mobile-frame">
+        <!-- Main Scrollable Content -->
+        <div class="main-content">
+            @Body
+        </div>
+
+        <!-- Sticky Bottom Panels -->
+        <div class="bottom-panels">
+            <!-- Active Workout Panel (shows when workout is selected/active) -->
+            @if (StateService.ActiveWorkout != null)
+            {
+                <div class="active-workout-bar">
+                    <div class="workout-info">
+                        <span class="workout-title">@StateService.ActiveWorkout.Name.ToUpper()</span>
+                        @if (StateService.IsWorkoutActive)
+                        {
+                            <span class="workout-status-dot active"></span>
+                        }
+                    </div>
+                    <div class="workout-controls">
+                        <!-- Play/Pause -->
+                        @if (StateService.IsWorkoutActive)
+                        {
+                            <button class="ctrl-btn" @onclick="StateService.PauseWorkout">
+                                <i class="bi bi-pause-fill"></i>
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="ctrl-btn" @onclick="StateService.StartWorkout">
+                                <i class="bi bi-play-fill"></i>
+                            </button>
+                        }
+                        <!-- Skip Block -->
+                        <button class="ctrl-btn" @onclick="StateService.SkipInterval" title="Suivant">
+                            <i class="bi bi-skip-forward-fill"></i>
+                        </button>
+                        <!-- Workout Time -->
+                        <div class="workout-time">
+                            <i class="bi bi-stopwatch"></i>
+                            <span>@FormatTime(StateService.ElapsedSeconds)</span>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Bottom Navigation Bar -->
+            <div class="bottom-nav">
+                <button class="nav-item @(IsActive("/settings") ? "active" : "")" @onclick='() => Navigation.NavigateTo("/settings")'>
+                    <i class="bi bi-gear-fill"></i>
+                    <span>Settings</span>
+                </button>
+                <button class="nav-item @(IsActive("/") ? "active" : "")" @onclick='() => Navigation.NavigateTo("/")'>
+                    <i class="bi bi-house-door-fill"></i>
+                    <span>Home</span>
+                </button>
+                <button class="nav-item @(IsActive("/workouts") ? "active" : "")" @onclick='() => Navigation.NavigateTo("/workouts")'>
+                    <i class="bi bi-bar-chart-steps"></i>
+                    <span>Workouts</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        StateService.OnStateChanged += HandleStateChanged;
+        Navigation.LocationChanged += HandleLocationChanged;
+    }
+
+    private void HandleStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private bool IsActive(string path)
+    {
+        var relative = Navigation.ToBaseRelativePath(Navigation.Uri);
+        if (path == "/")
+        {
+            return string.IsNullOrEmpty(relative) || relative.StartsWith("index.html");
+        }
+        return relative.StartsWith(path.TrimStart('/'));
+    }
+
+    private string FormatTime(double seconds)
+    {
+        var h = (int)(seconds / 3600);
+        var m = (int)((seconds % 3600) / 60);
+        var s = (int)(seconds % 60);
+        if (h > 0)
+        {
+            return $"{h:D2}:{m:D2}:{s:D2}";
+        }
+        return $"{m:D2}:{s:D2}";
+    }
+
+    public void Dispose()
+    {
+        StateService.OnStateChanged -= HandleStateChanged;
+        Navigation.LocationChanged -= HandleLocationChanged;
+    }
+}

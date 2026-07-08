@@ -1,0 +1,294 @@
+@page "/settings"
+@inject Trainingify.Services.TrainingStateService StateService
+@implements IDisposable
+
+<PageTitle>Trainingify - Settings</PageTitle>
+
+<div class="app-header">
+    <h1 class="app-title">Device Control</h1>
+    <div class="status-indicators">
+        <div class="indicator">
+            <span class="bi bi-bluetooth"></span>
+            <span>BLE</span>
+        </div>
+        <div class="indicator">
+            <span class="bi bi-broadcast"></span>
+            <span>ANT+</span>
+        </div>
+    </div>
+</div>
+
+<!-- Profile / FTP Details -->
+<div class="card-custom">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="fw-bold">PROFIL ATHLÈTE</span>
+    </div>
+    
+    <div class="profile-input-group">
+        <div class="profile-input-box">
+            <label>FTP (WATTS)</label>
+            <input type="number" value="@Ftp" @onchange="OnFtpChanged" />
+        </div>
+        <div class="profile-input-box">
+            <label>POIDS (KG)</label>
+            <input type="number" value="@Weight" @onchange="OnWeightChanged" />
+        </div>
+    </div>
+</div>
+
+<!-- Scanner Control -->
+<div class="card-custom">
+    @if (StateService.IsScanning)
+    {
+        <button class="btn btn-warning w-100 fw-bold py-2 text-dark" style="border-radius: 12px;" disabled>
+            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            RECHERCHE DE CAPTEURS EN COURS (BLE & ANT+)...
+        </button>
+    }
+    else
+    {
+        <button class="btn btn-outline-warning w-100 fw-bold py-2" @onclick='() => Scan("All")' style="border-radius: 12px; border-color: #ffd60a; color: #ffd60a;">
+            <i class="bi bi-search me-2"></i> RECHERCHER DES CAPTEURS (BLE & ANT+)
+        </button>
+    }
+</div>
+
+<!-- Device list -->
+<div class="devices-list">
+    <!-- Controllable Smart Trainer -->
+    <div class="device-row align-items-start">
+        <div class="device-info">
+            <i class="bi bi-bicycle device-icon mt-1 @(StateService.ControllableConnected ? "connected" : "")"></i>
+            <div>
+                <div class="device-name">@StateService.GetDeviceName("Controllable", StateService.SelectedControllableId)</div>
+                <div class="device-values">
+                    @if (StateService.ControllableConnected)
+                    {
+                        <span class="badge bg-dark text-light border border-secondary me-1" style="font-size: 8px;">
+                            @(StateService.GetDeviceProtocol("Controllable", StateService.SelectedControllableId))
+                        </span>
+                        <span>Pwr: @StateService.Power W | Cad: @StateService.Cadence rpm | Spd: @StateService.Speed km/h</span>
+                    }
+                    else
+                    {
+                        <span>Déconnecté</span>
+                    }
+                </div>
+                <!-- Selection Dropdown -->
+                <select class="form-select form-select-sm mt-2 bg-black text-light border-secondary" style="font-size: 11px; max-width: 250px; border-color: #333;"
+                        value="@StateService.SelectedControllableId" @onchange="OnControllableDeviceSelected">
+                    @foreach (var dev in StateService.DiscoveredDevices.Where(d => d.DeviceType == "Controllable"))
+                    {
+                        <option value="@dev.Address">@dev.Name (@dev.Protocol)</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <label class="device-switch mt-1">
+            <input type="checkbox" checked="@StateService.ControllableConnected" @onchange="ToggleControllable" />
+            <span class="slider"></span>
+        </label>
+    </div>
+
+    <!-- Heart Rate Monitor -->
+    <div class="device-row align-items-start">
+        <div class="device-info">
+            <i class="bi bi-heart-fill device-icon mt-1 @(StateService.HrmConnected ? "connected" : "")" style="color: @(StateService.HrmConnected ? "var(--accent-red)" : "var(--text-muted)");"></i>
+            <div>
+                <div class="device-name">@StateService.GetDeviceName("HRM", StateService.SelectedHrmId)</div>
+                <div class="device-values">
+                    @if (StateService.HrmConnected)
+                    {
+                        <span class="badge bg-dark text-light border border-secondary me-1" style="font-size: 8px;">
+                            @(StateService.GetDeviceProtocol("HRM", StateService.SelectedHrmId))
+                        </span>
+                        <span>Hr: @StateService.HeartRate bpm</span>
+                    }
+                    else
+                    {
+                        <span>Déconnecté</span>
+                    }
+                </div>
+                <!-- Selection Dropdown -->
+                <select class="form-select form-select-sm mt-2 bg-black text-light border-secondary" style="font-size: 11px; max-width: 250px; border-color: #333;"
+                        value="@StateService.SelectedHrmId" @onchange="OnHrmDeviceSelected">
+                    @foreach (var dev in StateService.DiscoveredDevices.Where(d => d.DeviceType == "HRM"))
+                    {
+                        <option value="@dev.Address">@dev.Name (@dev.Protocol)</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <label class="device-switch mt-1">
+            <input type="checkbox" checked="@StateService.HrmConnected" @onchange="ToggleHrm" />
+            <span class="slider"></span>
+        </label>
+    </div>
+
+    <!-- Moxy Muscle Oxygen Sensor -->
+    <div class="device-row align-items-start">
+        <div class="device-info">
+            <i class="bi bi-activity device-icon mt-1 @(StateService.MoxyConnected ? "connected" : "")" style="color: @(StateService.MoxyConnected ? "var(--accent-cyan)" : "var(--text-muted)");"></i>
+            <div>
+                <div class="device-name">@StateService.GetDeviceName("Moxy", StateService.SelectedMoxyId)</div>
+                <div class="device-values">
+                    @if (StateService.MoxyConnected)
+                    {
+                        <span class="badge bg-dark text-light border border-secondary me-1" style="font-size: 8px;">
+                            @(StateService.GetDeviceProtocol("Moxy", StateService.SelectedMoxyId))
+                        </span>
+                        <span>SmO2: @StateService.SmO2% | THb: @StateService.THb g/dL</span>
+                    }
+                    else
+                    {
+                        <span>Déconnecté</span>
+                    }
+                </div>
+                <!-- Selection Dropdown -->
+                <select class="form-select form-select-sm mt-2 bg-black text-light border-secondary" style="font-size: 11px; max-width: 250px; border-color: #333;"
+                        value="@StateService.SelectedMoxyId" @onchange="OnMoxyDeviceSelected">
+                    @foreach (var dev in StateService.DiscoveredDevices.Where(d => d.DeviceType == "Moxy"))
+                    {
+                        <option value="@dev.Address">@dev.Name (@dev.Protocol)</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <label class="device-switch mt-1">
+            <input type="checkbox" checked="@StateService.MoxyConnected" @onchange="ToggleMoxy" />
+            <span class="slider"></span>
+        </label>
+    </div>
+
+    <!-- Core Temp Sensor -->
+    <div class="device-row align-items-start">
+        <div class="device-info">
+            <i class="bi bi-thermometer-half device-icon mt-1 @(StateService.CoreTempConnected ? "connected" : "")" style="color: @(StateService.CoreTempConnected ? "var(--accent-yellow)" : "var(--text-muted)");"></i>
+            <div>
+                <div class="device-name">@StateService.GetDeviceName("CoreTemp", StateService.SelectedCoreTempId)</div>
+                <div class="device-values">
+                    @if (StateService.CoreTempConnected)
+                    {
+                        <span class="badge bg-dark text-light border border-secondary me-1" style="font-size: 8px;">
+                            @(StateService.GetDeviceProtocol("CoreTemp", StateService.SelectedCoreTempId))
+                        </span>
+                        <span>Core: @(StateService.CoreTemp?.ToString("F1") ?? "--")°C | Skin: @(StateService.SkinTemp?.ToString("F1") ?? "--")°C</span>
+                    }
+                    else
+                    {
+                        <span>Déconnecté</span>
+                    }
+                </div>
+                <!-- Selection Dropdown -->
+                <select class="form-select form-select-sm mt-2 bg-black text-light border-secondary" style="font-size: 11px; max-width: 250px; border-color: #333;"
+                        value="@StateService.SelectedCoreTempId" @onchange="OnCoreTempDeviceSelected">
+                    @foreach (var dev in StateService.DiscoveredDevices.Where(d => d.DeviceType == "CoreTemp"))
+                    {
+                        <option value="@dev.Address">@dev.Name (@dev.Protocol)</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <label class="device-switch mt-1">
+            <input type="checkbox" checked="@StateService.CoreTempConnected" @onchange="ToggleCoreTemp" />
+            <span class="slider"></span>
+        </label>
+    </div>
+</div>
+
+@code {
+    private double Ftp { get; set; }
+    private double Weight { get; set; }
+
+    protected override void OnInitialized()
+    {
+        StateService.OnStateChanged += HandleStateChanged;
+        Ftp = StateService.Profile.Ftp;
+        Weight = StateService.Profile.Weight;
+    }
+
+    private void HandleStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task Scan(string protocol)
+    {
+        await StateService.ScanDevicesAsync(protocol);
+    }
+
+    private async Task OnFtpChanged(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), out var ftp))
+        {
+            Ftp = ftp;
+            await StateService.UpdateProfileAsync(Weight, Ftp);
+        }
+    }
+
+    private async Task OnWeightChanged(ChangeEventArgs e)
+    {
+        if (double.TryParse(e.Value?.ToString(), out var weight))
+        {
+            Weight = weight;
+            await StateService.UpdateProfileAsync(Weight, Ftp);
+        }
+    }
+
+    private void OnControllableDeviceSelected(ChangeEventArgs e)
+    {
+        if (e.Value is string val)
+        {
+            StateService.SelectedControllableId = val;
+        }
+    }
+
+    private void OnHrmDeviceSelected(ChangeEventArgs e)
+    {
+        if (e.Value is string val)
+        {
+            StateService.SelectedHrmId = val;
+        }
+    }
+
+    private void OnMoxyDeviceSelected(ChangeEventArgs e)
+    {
+        if (e.Value is string val)
+        {
+            StateService.SelectedMoxyId = val;
+        }
+    }
+
+    private void OnCoreTempDeviceSelected(ChangeEventArgs e)
+    {
+        if (e.Value is string val)
+        {
+            StateService.SelectedCoreTempId = val;
+        }
+    }
+
+    private void ToggleControllable(ChangeEventArgs e)
+    {
+        StateService.ControllableConnected = e.Value is bool val && val;
+    }
+
+    private void ToggleHrm(ChangeEventArgs e)
+    {
+        StateService.HrmConnected = e.Value is bool val && val;
+    }
+
+    private void ToggleMoxy(ChangeEventArgs e)
+    {
+        StateService.MoxyConnected = e.Value is bool val && val;
+    }
+
+    private void ToggleCoreTemp(ChangeEventArgs e)
+    {
+        StateService.CoreTempConnected = e.Value is bool val && val;
+    }
+
+    public void Dispose()
+    {
+        StateService.OnStateChanged -= HandleStateChanged;
+    }
+}

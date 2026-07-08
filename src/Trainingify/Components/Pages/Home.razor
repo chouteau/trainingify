@@ -1,0 +1,214 @@
+@page "/"
+@inject Trainingify.Services.TrainingStateService StateService
+@implements IDisposable
+
+<PageTitle>Trainingify - Indoor Cycling</PageTitle>
+
+<div class="app-header">
+    <h1 class="app-title">Trainingify</h1>
+    <div class="status-indicators">
+        <div class="indicator">
+            <span class="dot @(StateService.ControllableConnected ? "active" : "")"></span>
+            <span>Controllable</span>
+        </div>
+        <div class="indicator">
+            <span class="dot @(StateService.HrmConnected ? "active" : "")"></span>
+            <span>HRM</span>
+        </div>
+    </div>
+</div>
+
+<!-- Responsive Dashboard Grid -->
+<div class="dashboard-layout">
+    <div class="dashboard-left">
+        <!-- Metrics Grid -->
+        <div class="metrics-grid grid-3-col">
+            <!-- Row 1 -->
+            <div class="metric-box">
+                <span class="metric-label">Power</span>
+                <span class="metric-value val-yellow">@(StateService.Power > 0 ? $"{StateService.Power}" : "--")</span>
+                <span class="metric-label">Watts</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Interval Time</span>
+                <span class="metric-value">@FormatTime(StateService.IntervalSeconds)</span>
+                <span class="metric-label">Min:Sec</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Heart Rate</span>
+                <span class="metric-value val-red">@(StateService.HeartRate > 0 ? $"{StateService.HeartRate}" : "--")</span>
+                <span class="metric-label">Bpm</span>
+            </div>
+        </div>
+
+        <div class="metrics-grid grid-3-col">
+            <!-- Row 2 -->
+            <div class="metric-box">
+                <span class="metric-label">Target</span>
+                <span class="metric-value">@(StateService.ActiveWorkout != null ? $"{StateService.TargetPower}" : "--")</span>
+                <span class="metric-label">Watts</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Elapsed Time</span>
+                <span class="metric-value">@FormatTime(StateService.ElapsedSeconds)</span>
+                <span class="metric-label">Hr:Min:Sec</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Cadence</span>
+                <span class="metric-value">@(StateService.Cadence > 0 ? $"{StateService.Cadence}" : "--")</span>
+                <span class="metric-label">Rpm</span>
+            </div>
+        </div>
+
+        <div class="metrics-grid grid-4-col">
+            <!-- Row 3 -->
+            <div class="metric-box">
+                <span class="metric-label">SmO2</span>
+                <span class="metric-value val-green">@(StateService.SmO2 > 0 ? $"{StateService.SmO2:F1}" : "--")</span>
+                <span class="metric-label">%</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">THb</span>
+                <span class="metric-value val-orange">@(StateService.THb > 0 ? $"{StateService.THb:F2}" : "--")</span>
+                <span class="metric-label">g/dL</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Core</span>
+                <span class="metric-value">@(StateService.CoreTemp.HasValue ? $"{StateService.CoreTemp:F1}" : "--")</span>
+                <span class="metric-label">°C</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Skin</span>
+                <span class="metric-value val-muted">@(StateService.SkinTemp.HasValue ? $"{StateService.SkinTemp:F1}" : "--")</span>
+                <span class="metric-label">°C</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-right">
+        <!-- Real-time SVG Graph -->
+        <div class="graph-container">
+            <svg width="100%" height="100%" viewBox="0 0 400 130" preserveAspectRatio="none">
+                <!-- Grid lines -->
+                <line x1="0" y1="32.5" x2="400" y2="32.5" stroke="#181818" stroke-width="1" />
+                <line x1="0" y1="65" x2="400" y2="65" stroke="#181818" stroke-width="1" />
+                <line x1="0" y1="97.5" x2="400" y2="97.5" stroke="#181818" stroke-width="1" />
+
+                <!-- Power line -->
+                @if (StateService.PowerHistory.Count > 1)
+                {
+                    <path class="graph-line graph-line-power" d="@GetSvgPath(StateService.PowerHistory, 400, 130, 0, 500)" />
+                }
+
+                <!-- Heart Rate line -->
+                @if (StateService.HeartRateHistory.Count > 1)
+                {
+                    <path class="graph-line graph-line-hr" d="@GetSvgPath(StateService.HeartRateHistory, 400, 130, 50, 200)" />
+                }
+            </svg>
+        </div>
+
+        <!-- Controls Panel -->
+        <div class="card-custom controls-panel">
+            <div class="control-modes">
+                <button class="mode-btn @(StateService.TargetMode == "ERG" ? "active" : "")" @onclick='() => SetMode("ERG")'>ERG</button>
+                <button class="mode-btn @(StateService.TargetMode == "RESISTANCE" ? "active" : "")" @onclick='() => SetMode("RESISTANCE")'>Resistance</button>
+                <button class="mode-btn @(StateService.TargetMode == "SLOPE" ? "active" : "")" @onclick='() => SetMode("SLOPE")'>Slope</button>
+            </div>
+
+            <div class="target-setter">
+                <button class="setter-btn" @onclick="DecrementTarget">-</button>
+                <div class="target-display">
+                    <span class="target-val">@StateService.TargetPower</span>
+                    <br />
+                    <span class="target-lbl">@StateService.TargetMode Target</span>
+                </div>
+                <button class="setter-btn" @onclick="IncrementTarget">+</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        StateService.OnStateChanged += HandleStateChanged;
+    }
+
+    private void HandleStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void SetMode(string mode)
+    {
+        StateService.TargetMode = mode;
+        StateService.TargetPower = mode switch
+        {
+            "ERG" => StateService.Profile.Ftp,
+            "RESISTANCE" => 25, // default resistance 25%
+            "SLOPE" => 1.5,     // default slope 1.5%
+            _ => 100
+        };
+        StateService.PauseWorkout(); // trigger update
+    }
+
+    private void IncrementTarget()
+    {
+        StateService.TargetPower += StateService.TargetMode switch
+        {
+            "ERG" => 5,
+            "RESISTANCE" => 5,
+            "SLOPE" => 0.5,
+            _ => 5
+        };
+        StateService.PauseWorkout(); // trigger update
+    }
+
+    private void DecrementTarget()
+    {
+        StateService.TargetPower = Math.Max(0, StateService.TargetPower - StateService.TargetMode switch
+        {
+            "ERG" => 5,
+            "RESISTANCE" => 5,
+            "SLOPE" => 0.5,
+            _ => 5
+        });
+        StateService.PauseWorkout(); // trigger update
+    }
+
+    private string GetSvgPath(List<double> history, double width, double height, double minVal, double maxVal)
+    {
+        var points = new List<string>();
+        var count = history.Count;
+        var range = maxVal - minVal;
+
+        for (int i = 0; i < count; i++)
+        {
+            var x = i * (width / 59.0); // max 60 elements
+            var normalizedVal = (history[i] - minVal) / range;
+            normalizedVal = Math.Clamp(normalizedVal, 0.0, 1.0);
+            var y = height - (normalizedVal * (height - 20.0)) - 10.0; // padding inside SVG
+            points.Add($"{x:F1},{y:F1}");
+        }
+
+        return "M " + string.Join(" L ", points);
+    }
+
+    private string FormatTime(double seconds)
+    {
+        var h = (int)(seconds / 3600);
+        var m = (int)((seconds % 3600) / 60);
+        var s = (int)(seconds % 60);
+        if (h > 0)
+        {
+            return $"{h:D2}:{m:D2}:{s:D2}";
+        }
+        return $"{m:D2}:{s:D2}";
+    }
+
+    public void Dispose()
+    {
+        StateService.OnStateChanged -= HandleStateChanged;
+    }
+}
