@@ -359,7 +359,7 @@ html, body {
     display: flex;
     align-items: flex-end;
     gap: 4px;
-    height: 80px;
+    height: 280px;
     padding: 10px 0;
     border-bottom: 2px solid var(--border-color);
 }

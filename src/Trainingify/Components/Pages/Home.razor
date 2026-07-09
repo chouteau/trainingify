@@ -15,6 +15,10 @@
             <span class="dot @(StateService.HrmConnected ? "active" : "")"></span>
             <span>HRM</span>
         </div>
+        <div class="indicator">
+            <span class="dot @(StateService.FanConnected ? "active" : "")"></span>
+            <span>Fan</span>
+        </div>
     </div>
 </div>
 
@@ -126,6 +130,56 @@
                 <button class="setter-btn" @onclick="IncrementTarget">+</button>
             </div>
         </div>
+
+        <!-- Fan Control Panel -->
+        @if (StateService.FanConnected)
+        {
+            <div class="card-custom controls-panel mt-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="fw-bold" style="color: var(--accent-cyan); font-size: 11px; letter-spacing: 1px;">
+                        <i class="bi bi-wind me-1"></i> VENTILATEUR WAHOO
+                    </span>
+                    <label class="device-switch">
+                        <input type="checkbox" checked="@StateService.IsFanOn" @onchange="ToggleFan" />
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                @if (StateService.IsFanOn)
+                {
+                    <div class="control-modes mb-3">
+                        <button class="mode-btn @(StateService.FanMode == "Manual" ? "active" : "")" @onclick='() => SetFanMode("Manual")'>Manuel</button>
+                        <button class="mode-btn @(StateService.FanMode == "HeartRate" ? "active" : "")" @onclick='() => SetFanMode("HeartRate")'>Cardio</button>
+                        <button class="mode-btn @(StateService.FanMode == "TrainerSpeed" ? "active" : "")" @onclick='() => SetFanMode("TrainerSpeed")'>Vitesse HT</button>
+                    </div>
+
+                    @if (StateService.FanMode == "Manual")
+                    {
+                        <div class="d-flex justify-content-between align-items-center bg-black p-2 border border-secondary" style="border-radius: 8px; border-color: #333 !important;">
+                            <button class="btn btn-sm btn-outline-light px-3 py-1" style="font-size: 16px; font-weight: bold; border-color: #444;" @onclick="DecrementFanSpeed" disabled="@(StateService.FanSpeed <= 1)">-</button>
+                            <div class="text-center">
+                                <span class="fw-bold text-warning" style="font-size: 18px;">Vitesse @StateService.FanSpeed</span>
+                            </div>
+                            <button class="btn btn-sm btn-outline-light px-3 py-1" style="font-size: 16px; font-weight: bold; border-color: #444;" @onclick="IncrementFanSpeed" disabled="@(StateService.FanSpeed >= 5)">+</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center bg-black p-2 border border-secondary text-muted" style="border-radius: 8px; border-color: #333 !important; font-size: 12px;">
+                            Vitesse : <span class="text-warning fw-bold" style="font-size: 16px;">@StateService.FanSpeed</span>
+                            <br />
+                            <span style="font-size: 10px;">Couplage actif (@(StateService.FanMode == "HeartRate" ? "FC" : "Vitesse HT"))</span>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center text-muted py-3" style="font-size: 11px;">
+                        Le ventilateur est éteint.
+                    </div>
+                }
+            </div>
+        }
     </div>
 </div>
 
@@ -205,6 +259,32 @@
             return $"{h:D2}:{m:D2}:{s:D2}";
         }
         return $"{m:D2}:{s:D2}";
+    }
+
+    private void ToggleFan(ChangeEventArgs e)
+    {
+        StateService.IsFanOn = e.Value is bool val && val;
+    }
+
+    private void SetFanMode(string mode)
+    {
+        StateService.FanMode = mode;
+    }
+
+    private void IncrementFanSpeed()
+    {
+        if (StateService.FanSpeed < 5)
+        {
+            StateService.FanSpeed++;
+        }
+    }
+
+    private void DecrementFanSpeed()
+    {
+        if (StateService.FanSpeed > 1)
+        {
+            StateService.FanSpeed--;
+        }
     }
 
     public void Dispose()

@@ -194,6 +194,41 @@
             <span class="slider"></span>
         </label>
     </div>
+
+    <!-- Connected Fan -->
+    <div class="device-row align-items-start">
+        <div class="device-info">
+            <i class="bi bi-wind device-icon mt-1 @(StateService.FanConnected ? "connected" : "")" style="color: @(StateService.FanConnected ? "var(--accent-cyan)" : "var(--text-muted)");"></i>
+            <div>
+                <div class="device-name">@StateService.GetDeviceName("Fan", StateService.SelectedFanId)</div>
+                <div class="device-values">
+                    @if (StateService.FanConnected)
+                    {
+                        <span class="badge bg-dark text-light border border-secondary me-1" style="font-size: 8px;">
+                            @(StateService.GetDeviceProtocol("Fan", StateService.SelectedFanId))
+                        </span>
+                        <span>Mode: @StateService.FanMode | Vitesse: @StateService.FanSpeed/5 | État: @(StateService.IsFanOn ? "Allumé" : "Éteint")</span>
+                    }
+                    else
+                    {
+                        <span>Déconnecté</span>
+                    }
+                </div>
+                <!-- Selection Dropdown -->
+                <select class="form-select form-select-sm mt-2 bg-black text-light border-secondary" style="font-size: 11px; max-width: 250px; border-color: #333;"
+                        value="@StateService.SelectedFanId" @onchange="OnFanDeviceSelected">
+                    @foreach (var dev in StateService.DiscoveredDevices.Where(d => d.DeviceType == "Fan"))
+                    {
+                        <option value="@dev.Address">@dev.Name (@dev.Protocol)</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <label class="device-switch mt-1">
+            <input type="checkbox" checked="@StateService.FanConnected" @onchange="ToggleFan" />
+            <span class="slider"></span>
+        </label>
+    </div>
 </div>
 
 @code {
@@ -285,6 +320,19 @@
     private void ToggleCoreTemp(ChangeEventArgs e)
     {
         StateService.CoreTempConnected = e.Value is bool val && val;
+    }
+
+    private void OnFanDeviceSelected(ChangeEventArgs e)
+    {
+        if (e.Value is string val)
+        {
+            StateService.SelectedFanId = val;
+        }
+    }
+
+    private void ToggleFan(ChangeEventArgs e)
+    {
+        StateService.FanConnected = e.Value is bool val && val;
     }
 
     public void Dispose()
