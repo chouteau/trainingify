@@ -11,6 +11,7 @@ using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Advertisement;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Storage.Streams;
+using Windows.Devices.Enumeration;
 #endif
 
 namespace Trainingify.Services;
@@ -27,6 +28,8 @@ public class TrainingStateService : IDisposable
     private GattCharacteristic? _ftmsCharacteristic;
     private BluetoothLEDevice? _hrmDevice;
     private GattCharacteristic? _hrmCharacteristic;
+    private BluetoothLEDevice? _fanDevice;
+    private GattCharacteristic? _fanCharacteristic;
     private ushort? _lastCrankRevs;
     private ushort? _lastCrankEventTime;
 
@@ -38,6 +41,9 @@ public class TrainingStateService : IDisposable
 
     private static readonly Guid HeartRateServiceUuid = Guid.Parse("0000180d-0000-1000-8000-00805f9b34fb");
     private static readonly Guid HeartRateMeasurementUuid = Guid.Parse("00002a37-0000-1000-8000-00805f9b34fb");
+
+    private static readonly Guid FanServiceUuid = Guid.Parse("a026e037-0a7d-4ab3-97fa-f1500f9feb8b");
+    private static readonly Guid FanControlUuid = Guid.Parse("a026e038-0a7d-4ab3-97fa-f1500f9feb8b");
 #endif
 
     public event Action? OnStateChanged;
@@ -74,9 +80,73 @@ public class TrainingStateService : IDisposable
     public double? SkinTemp { get; private set; }
 
     // Fan State
-    public bool IsFanOn { get; set; } = true;
-    public int FanSpeed { get; set; } = 1; // 1 to 5
-    public string FanMode { get; set; } = "Manual"; // Manual, HeartRate, TrainerSpeed
+    private bool _isFanOn = true;
+    public bool IsFanOn
+    {
+        get => _isFanOn;
+        set
+        {
+            if (_isFanOn != value)
+            {
+                _isFanOn = value;
+                NotifyStateChanged();
+#if WINDOWS
+                if (FanConnected)
+                {
+                    if (value)
+                    {
+                        _ = WriteFanModeAsync(FanMode);
+                        _ = WriteFanSpeedAsync(FanSpeed);
+                    }
+                    else
+                    {
+                        _ = WriteFanSpeedAsync(0);
+                    }
+                }
+#endif
+            }
+        }
+    }
+
+    private int _fanSpeed = 1;
+    public int FanSpeed
+    {
+        get => _fanSpeed;
+        set
+        {
+            if (_fanSpeed != value)
+            {
+                _fanSpeed = value;
+                NotifyStateChanged();
+#if WINDOWS
+                if (FanConnected && IsFanOn)
+                {
+                    _ = WriteFanSpeedAsync(value);
+                }
+#endif
+            }
+        }
+    }
+
+    private string _fanMode = "Manual";
+    public string FanMode
+    {
+        get => _fanMode;
+        set
+        {
+            if (_fanMode != value)
+            {
+                _fanMode = value;
+                NotifyStateChanged();
+#if WINDOWS
+                if (FanConnected && IsFanOn)
+                {
+                    _ = WriteFanModeAsync(value);
+                }
+#endif
+            }
+        }
+    }
 
     // Device Settings & Connections
     private bool _fanConnected;
@@ -85,9 +155,14 @@ public class TrainingStateService : IDisposable
         get => _fanConnected;
         set
         {
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] FanConnected setter called with value: {value} (current backing field: {_fanConnected}, SelectedFanId: '{SelectedFanId}')");
             if (_fanConnected != value)
             {
                 _fanConnected = value;
+#if WINDOWS
+                if (value) ConnectFanAsync();
+                else DisconnectFan();
+#endif
                 NotifyStateChanged();
                 _ = SaveDeviceConnectionStateAsync("Fan", SelectedFanId, value);
             }
@@ -103,6 +178,10 @@ public class TrainingStateService : IDisposable
             if (_controllableConnected != value)
             {
                 _controllableConnected = value;
+#if WINDOWS
+                if (value) ConnectControllableAsync();
+                else DisconnectControllable();
+#endif
                 NotifyStateChanged();
                 _ = SaveDeviceConnectionStateAsync("Controllable", SelectedControllableId, value);
             }
@@ -118,6 +197,10 @@ public class TrainingStateService : IDisposable
             if (_hrmConnected != value)
             {
                 _hrmConnected = value;
+#if WINDOWS
+                if (value) ConnectHrmAsync();
+                else DisconnectHrm();
+#endif
                 NotifyStateChanged();
                 _ = SaveDeviceConnectionStateAsync("HRM", SelectedHrmId, value);
             }
@@ -209,23 +292,23 @@ public class TrainingStateService : IDisposable
                 {
                     case "Controllable":
                         _selectedControllableId = device.Address;
-                        _controllableConnected = device.IsEnabled;
+                        ControllableConnected = device.IsEnabled;
                         break;
                     case "HRM":
                         _selectedHrmId = device.Address;
-                        _hrmConnected = device.IsEnabled;
+                        HrmConnected = device.IsEnabled;
                         break;
                     case "Moxy":
                         _selectedMoxyId = device.Address;
-                        _moxyConnected = device.IsEnabled;
+                        MoxyConnected = device.IsEnabled;
                         break;
                     case "CoreTemp":
                         _selectedCoreTempId = device.Address;
-                        _coreTempConnected = device.IsEnabled;
+                        CoreTempConnected = device.IsEnabled;
                         break;
                     case "Fan":
                         _selectedFanId = device.Address;
-                        _fanConnected = device.IsEnabled;
+                        FanConnected = device.IsEnabled;
                         break;
                 }
             }
@@ -492,6 +575,13 @@ public class TrainingStateService : IDisposable
             {
                 _selectedControllableId = value;
                 NotifyStateChanged();
+#if WINDOWS
+                if (ControllableConnected)
+                {
+                    DisconnectControllable();
+                    ConnectControllableAsync();
+                }
+#endif
                 if (ControllableConnected)
                 {
                     _ = SaveDeviceConnectionStateAsync("Controllable", value, true);
@@ -510,6 +600,13 @@ public class TrainingStateService : IDisposable
             {
                 _selectedHrmId = value;
                 NotifyStateChanged();
+#if WINDOWS
+                if (HrmConnected)
+                {
+                    DisconnectHrm();
+                    ConnectHrmAsync();
+                }
+#endif
                 if (HrmConnected)
                 {
                     _ = SaveDeviceConnectionStateAsync("HRM", value, true);
@@ -560,10 +657,18 @@ public class TrainingStateService : IDisposable
         get => _selectedFanId;
         set
         {
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] SelectedFanId setter called with value: '{value}' (current backing field: '{_selectedFanId}', FanConnected: {FanConnected})");
             if (_selectedFanId != value)
             {
                 _selectedFanId = value;
                 NotifyStateChanged();
+#if WINDOWS
+                if (FanConnected)
+                {
+                    DisconnectFan();
+                    ConnectFanAsync();
+                }
+#endif
                 if (FanConnected)
                 {
                     _ = SaveDeviceConnectionStateAsync("Fan", value, true);
@@ -680,6 +785,60 @@ public class TrainingStateService : IDisposable
         }
         
         NotifyStateChanged();
+    }
+
+#if WINDOWS
+    private void OnAdvertisementReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
+    {
+        var localName = args.Advertisement.LocalName;
+        if (string.IsNullOrEmpty(localName)) return;
+
+        string deviceType = "Controllable"; // Default
+        if (localName.Contains("KICKR", StringComparison.OrdinalIgnoreCase) || 
+            localName.Contains("Tacx", StringComparison.OrdinalIgnoreCase) || 
+            localName.Contains("Trainer", StringComparison.OrdinalIgnoreCase) ||
+            localName.Contains("Bike", StringComparison.OrdinalIgnoreCase))
+        {
+            deviceType = "Controllable";
+        }
+        else if (localName.Contains("Polar", StringComparison.OrdinalIgnoreCase) || 
+                 localName.Contains("HRM", StringComparison.OrdinalIgnoreCase) || 
+                 localName.Contains("H10", StringComparison.OrdinalIgnoreCase) ||
+                 localName.Contains("Heart", StringComparison.OrdinalIgnoreCase))
+        {
+            deviceType = "HRM";
+        }
+        else if (localName.Contains("Moxy", StringComparison.OrdinalIgnoreCase))
+        {
+            deviceType = "Moxy";
+        }
+        else if (localName.Contains("Core", StringComparison.OrdinalIgnoreCase))
+        {
+            deviceType = "CoreTemp";
+        }
+        else if (localName.Contains("Headwind", StringComparison.OrdinalIgnoreCase) ||
+                 localName.Contains("Fan", StringComparison.OrdinalIgnoreCase))
+        {
+            deviceType = "Fan";
+        }
+
+        var addressStr = args.BluetoothAddress.ToString("X");
+        System.Diagnostics.Debug.WriteLine($"[BLE Scan] Found device: '{localName}' ({addressStr}) - Type: {deviceType}");
+        
+        lock (DiscoveredDevices)
+        {
+            if (DiscoveredDevices.Any(d => d.Address == addressStr && d.DeviceType == deviceType))
+                return;
+
+            DiscoveredDevices.Add(new DiscoveredDevice
+            {
+                Name = localName,
+                Protocol = "Bluetooth",
+                Address = addressStr,
+                DeviceType = deviceType,
+                Rssi = args.RawSignalStrengthInDBm
+            });
+        }
     }
 
     private async void ConnectControllableAsync()
@@ -1094,6 +1253,188 @@ public class TrainingStateService : IDisposable
 
         NotifyStateChanged();
     }
+
+    private async void ConnectFanAsync()
+    {
+        System.Diagnostics.Debug.WriteLine($"[Fan BLE] ConnectFanAsync called for SelectedFanId: '{SelectedFanId}'");
+        if (string.IsNullOrEmpty(SelectedFanId))
+        {
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] SelectedFanId is null or empty");
+            return;
+        }
+
+        try
+        {
+            if (!ulong.TryParse(SelectedFanId, System.Globalization.NumberStyles.HexNumber, null, out ulong address))
+            {
+                System.Diagnostics.Debug.WriteLine($"[Fan BLE] SelectedFanId '{SelectedFanId}' is not a valid hex ulong address");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Connecting to address {address:X}...");
+            _fanDevice = await BluetoothLEDevice.FromBluetoothAddressAsync(address);
+            if (_fanDevice == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Fan BLE] FromBluetoothAddressAsync returned null device");
+                return;
+            }
+
+            // Check and attempt pairing if needed
+            if (!_fanDevice.DeviceInformation.Pairing.IsPaired)
+            {
+                System.Diagnostics.Debug.WriteLine("[Fan BLE] Device is not paired in Windows. Attempting programmatic pairing...");
+                var pairingResult = await _fanDevice.DeviceInformation.Pairing.PairAsync();
+                System.Diagnostics.Debug.WriteLine($"[Fan BLE] Programmatic pairing result status: {pairingResult.Status}");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[Fan BLE] Device is already paired in Windows.");
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Device connected. Querying services...");
+            var servicesResult = await _fanDevice.GetGattServicesAsync(BluetoothCacheMode.Uncached);
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] GetGattServicesAsync status: {servicesResult.Status}");
+            if (servicesResult.Status != GattCommunicationStatus.Success) return;
+
+            GattCharacteristic? foundChar = null;
+
+            foreach (var service in servicesResult.Services)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Fan BLE] Service found: {service.Uuid}");
+                if (service.Uuid.ToString().StartsWith("a026", StringComparison.OrdinalIgnoreCase))
+                {
+                    var charResult = await service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached);
+                    System.Diagnostics.Debug.WriteLine($"[Fan BLE]   GetCharacteristicsAsync for service {service.Uuid} status: {charResult.Status}");
+                    if (charResult.Status == GattCommunicationStatus.Success)
+                    {
+                        foreach (var c in charResult.Characteristics)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[Fan BLE]   Characteristic found under {service.Uuid}: {c.Uuid} (Properties: {c.CharacteristicProperties})");
+                            
+                            // Check if this characteristic is writable
+                            if (foundChar == null && 
+                                (c.CharacteristicProperties.HasFlag(GattCharacteristicProperties.Write) || 
+                                 c.CharacteristicProperties.HasFlag(GattCharacteristicProperties.WriteWithoutResponse)))
+                            {
+                                foundChar = c;
+                                System.Diagnostics.Debug.WriteLine($"[Fan BLE]   Selected as candidate control characteristic: {c.Uuid}");
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (foundChar != null)
+            {
+                _fanCharacteristic = foundChar;
+                System.Diagnostics.Debug.WriteLine($"[Fan BLE] Characteristic {_fanCharacteristic.Uuid} selected for control!");
+                
+                // Once connected, write initial mode and speed
+                await WriteFanModeAsync(FanMode);
+                if (IsFanOn)
+                {
+                    await WriteFanSpeedAsync(FanSpeed);
+                }
+                else
+                {
+                    await WriteFanSpeedAsync(0);
+                }
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[Fan BLE] No writable characteristic found under any a026* service.");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Error connecting to fan: {ex.Message}");
+        }
+    }
+
+    private void DisconnectFan()
+    {
+        System.Diagnostics.Debug.WriteLine($"[Fan BLE] DisconnectFan called");
+        try
+        {
+            if (_fanCharacteristic != null)
+            {
+                _fanCharacteristic = null;
+            }
+            _fanDevice?.Dispose();
+            _fanDevice = null;
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Fan disconnected and resources disposed");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Error disconnecting: {ex.Message}");
+        }
+    }
+
+    private async Task WriteFanModeAsync(string mode)
+    {
+        System.Diagnostics.Debug.WriteLine($"[Fan BLE] WriteFanModeAsync called with mode: '{mode}'");
+        if (_fanCharacteristic == null)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Cannot write mode. _fanCharacteristic is null (fan not connected)");
+            return;
+        }
+
+        try
+        {
+            byte[] value = mode switch
+            {
+                "HeartRate" => new byte[] { 0x04, 0x02 },
+                "TrainerSpeed" => new byte[] { 0x04, 0x03 },
+                _ => new byte[] { 0x04, 0x04 } // "Manual"
+            };
+
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Writing mode command bytes: {BitConverter.ToString(value)} to characteristic...");
+            var writer = new DataWriter();
+            writer.WriteBytes(value);
+            var result = await _fanCharacteristic.WriteValueAsync(writer.DetachBuffer());
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Mode write operation completed with result: {result}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Error writing fan mode: {ex.Message}");
+        }
+    }
+
+    private async Task WriteFanSpeedAsync(int speedLevel)
+    {
+        System.Diagnostics.Debug.WriteLine($"[Fan BLE] WriteFanSpeedAsync called with speedLevel: {speedLevel}");
+        if (_fanCharacteristic == null)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Cannot write speed. _fanCharacteristic is null (fan not connected)");
+            return;
+        }
+
+        try
+        {
+            byte speedPercentage = speedLevel switch
+            {
+                0 => 0,
+                1 => 20,
+                2 => 40,
+                3 => 60,
+                4 => 80,
+                5 => 100,
+                _ => 0
+            };
+
+            byte[] value = new byte[] { 0x02, speedPercentage };
+
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Writing speed command bytes: {BitConverter.ToString(value)} to characteristic (level {speedLevel} -> {speedPercentage}%)...");
+            var writer = new DataWriter();
+            writer.WriteBytes(value);
+            var result = await _fanCharacteristic.WriteValueAsync(writer.DetachBuffer());
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Speed write operation completed with result: {result}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Error writing fan speed: {ex.Message}");
+        }
+    }
 #endif
 
     public void Dispose()
@@ -1102,6 +1443,7 @@ public class TrainingStateService : IDisposable
 #if WINDOWS
         DisconnectControllable();
         DisconnectHrm();
+        DisconnectFan();
 #endif
     }
 }

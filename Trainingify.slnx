@@ -7,7 +7,5 @@
   <Folder Name="/Solution Items/">
     <File Path="doc/OAuth2PKCE_1.pdf" />
   </Folder>
-  <Project Path="src/Trainingify/Trainingify.csproj">
-    <Deploy Solution="Debug|Any CPU" />
-  </Project>
+  <Project Path="src/Trainingify/Trainingify.csproj" />
 </Solution>
