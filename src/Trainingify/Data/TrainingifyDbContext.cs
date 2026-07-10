@@ -56,7 +56,7 @@ public class TrainingifyDbContext : DbContext
 
         // Seed initial profile
         modelBuilder.Entity<UserProfile>().HasData(
-            new UserProfile { Id = 1, Name = "Cycliste", Weight = 75, Ftp = 256 }
+            new UserProfile { Id = 1, Name = "Cycliste", Weight = 75, Ftp = 250 }
         );
     }
 }
@@ -66,7 +66,7 @@ public class UserProfile
     public int Id { get; set; }
     public string Name { get; set; } = "Cycliste";
     public double Weight { get; set; } = 75.0; // kg
-    public double Ftp { get; set; } = 256.0;   // watts
+    public double Ftp { get; set; } = 250.0;   // watts
 }
 
 public class Workout

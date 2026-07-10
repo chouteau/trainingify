@@ -102,6 +102,26 @@ public class TrainingStateService : IDisposable
     private const double MinimumSimulatedGradePercent = -15.0;
     private const double MaximumSimulatedGradePercent = 20.0;
 
+    private int _workoutIntensityPercent = 100;
+    public int WorkoutIntensityPercent
+    {
+        get => _workoutIntensityPercent;
+        set
+        {
+            var clampedValue = Math.Clamp(value, 50, 150);
+            if (_workoutIntensityPercent == clampedValue) return;
+
+            _workoutIntensityPercent = clampedValue;
+            if (ActiveWorkout != null && !IsWorkoutActive)
+            {
+                SelectWorkout(ActiveWorkout);
+                return;
+            }
+
+            NotifyStateChanged();
+        }
+    }
+
     // Target Power
     private string _targetMode = "ERG";
     public string TargetMode
@@ -519,7 +539,7 @@ public class TrainingStateService : IDisposable
                 var ftp = Profile.Ftp;
                 if (ftp <= 0) ftp = 250;
                 WorkoutIntensityProfile = WorkoutIntensityProfile
-                    .Select(p => (int)Math.Round(p * ftp / 100.0))
+                    .Select(p => (int)Math.Round(p * ftp / 100.0 * WorkoutIntensityPercent / 100.0))
                     .ToList();
             }
         }
@@ -2208,6 +2228,20 @@ public class TrainingStateService : IDisposable
             System.Diagnostics.Debug.WriteLine($"Error loading workout templates: {ex.Message}");
             return new();
         }
+    }
+
+    public void SelectWorkoutTemplate(WorkoutTemplateDto template)
+    {
+        var durationSeconds = CalculateDurationSeconds(template.Segments);
+        SelectWorkout(new Workout
+        {
+            Id = 0,
+            Name = template.Name,
+            Type = "Plan",
+            DurationMinutes = (int)Math.Ceiling(durationSeconds / 60.0),
+            IntensityProfileJson = ConvertSegmentsToIntensityProfileJson(template.Segments),
+            IsFtpPercentage = true
+        });
     }
 
     public async Task<List<string>> GetAvailableTemplateGroupsAsync()

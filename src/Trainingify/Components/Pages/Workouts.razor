@@ -14,7 +14,6 @@
     </div>
 </div>
 
-
 @if (StateService.ActiveWorkout != null)
 {
     <!-- Real-time Workout Metrics Card -->
@@ -50,31 +49,54 @@
                 <span class="metric-value val-orange">@(StateService.Calories > 0 ? $"{StateService.Calories:F0}" : "0")</span>
                 <span class="metric-label">Kcal</span>
             </div>
-            <div class="metric-box erg-metric-box">
-                <span class="metric-label">Mode ERG</span>
-                <label class="device-switch erg-switch" title="Activer ou désactiver le contrôle automatique de la puissance">
-                    <input type="checkbox"
-                           checked="@StateService.IsErgModeEnabled"
-                           @onchange="ToggleErgMode"
-                           aria-label="Activer le mode ERG" />
-                    <span class="slider"></span>
-                </label>
-                <span class="metric-label erg-state @(StateService.IsErgModeEnabled ? "enabled" : "")">
-                    @(StateService.IsErgModeEnabled ? "Activé" : "Désactivé")
-                </span>
+        </div>
+
+        <div class="workout-controls-grid">
+            <div class="fan-control-panel">
+                <div class="fan-control-title"><i class="bi bi-wind"></i> Ventilateur</div>
+                <div class="fan-mode-tabs" role="group" aria-label="Mode du ventilateur">
+                    <button class="fan-mode-tab @(StateService.FanMode == "Manual" ? "active" : "")" @onclick='() => SelectFanMode("Manual")'>Manuel</button>
+                    <button class="fan-mode-tab @(StateService.FanMode == "HeartRate" ? "active" : "")" @onclick='() => SelectFanMode("HeartRate")'>Cardio</button>
+                    <button class="fan-mode-tab @(StateService.FanMode == "TrainerSpeed" ? "active" : "")" @onclick='() => SelectFanMode("TrainerSpeed")'>Vitesse</button>
+                </div>
+                <div class="fan-speed-control">
+                    <button class="trainer-target-button" @onclick="DecreaseFanSpeed" disabled="@(StateService.FanSpeed <= 0)" aria-label="Diminuer la vitesse du ventilateur">−</button>
+                    <div class="trainer-target-value">
+                        <span>@(StateService.FanSpeed * 20)%</span>
+                        <small>@GetFanModeLabel()</small>
+                    </div>
+                    <button class="trainer-target-button" @onclick="IncreaseFanSpeed" disabled="@(StateService.FanSpeed >= 5)" aria-label="Augmenter la vitesse du ventilateur">+</button>
+                </div>
             </div>
-            <div class="metric-box erg-metric-box">
-                <span class="metric-label">Pente selon puissance</span>
-                <label class="device-switch erg-switch" title="140 W = 0 %, 300 W = 12 % ; désactive le mode ERG">
-                    <input type="checkbox"
-                           checked="@StateService.IsPowerSlopeEnabled"
-                           @onchange="TogglePowerSlope"
-                           aria-label="Activer la pente proportionnelle à la puissance" />
-                    <span class="slider"></span>
-                </label>
-                <span class="metric-label erg-state @(StateService.IsPowerSlopeEnabled ? "enabled" : "")">
-                    @(StateService.IsPowerSlopeEnabled ? "Activé" : "Désactivé")
-                </span>
+            <div class="trainer-control-panel">
+                <div class="trainer-mode-tabs" role="group" aria-label="Mode de contrôle du home trainer">
+                    <button class="trainer-mode-tab @(StateService.TargetMode == "ERG" ? "active" : "")" @onclick='() => SelectTrainerMode("ERG")'>ERG</button>
+                    <button class="trainer-mode-tab @(StateService.TargetMode == "RESISTANCE" ? "active" : "")" @onclick='() => SelectTrainerMode("RESISTANCE")'>Résistance</button>
+                    <button class="trainer-mode-tab @(StateService.TargetMode == "SLOPE" ? "active" : "")" @onclick='() => SelectTrainerMode("SLOPE")'>Pente</button>
+                    <button class="trainer-mode-tab @(StateService.IsPowerSlopeEnabled ? "active" : "")" @onclick='() => SelectTrainerMode("POWER_SLOPE")'>Pente auto</button>
+                </div>
+                <div class="trainer-target-control">
+                    <button class="trainer-target-button" @onclick="DecreaseTrainerTarget" aria-label="Diminuer la consigne">−</button>
+                    <div class="trainer-target-value">
+                        <span>@GetTrainerTargetValue()</span>
+                        <small>@GetTrainerTargetLabel()</small>
+                    </div>
+                    <button class="trainer-target-button" @onclick="IncreaseTrainerTarget" aria-label="Augmenter la consigne">+</button>
+                </div>
+            </div>
+            <div class="workout-intensity-card">
+                <div>
+                    <span class="metric-label">INTENSITÉ DE LA SÉANCE</span>
+                    <div class="text-muted" style="font-size: 11px;">Profil : @StateService.Profile.Ftp.ToString("F0") W · @StateService.Profile.Weight.ToString("F0") kg · @GetFtpWattsPerKg().ToString("F2") W/kg</div>
+                </div>
+                <div class="d-flex align-items-center justify-content-center gap-2">
+                    <button class="trainer-target-button intensity-adjust-button" @onclick="DecreaseWorkoutIntensity" disabled="@(StateService.WorkoutIntensityPercent <= 50)" aria-label="Réduire l'intensité">−</button>
+                    <div class="trainer-target-value">
+                        <span>@StateService.WorkoutIntensityPercent%</span>
+                        <small>Coefficient FTP</small>
+                    </div>
+                    <button class="trainer-target-button intensity-adjust-button" @onclick="IncreaseWorkoutIntensity" disabled="@(StateService.WorkoutIntensityPercent >= 150)" aria-label="Augmenter l'intensité">+</button>
+                </div>
             </div>
         </div>
     </div>
@@ -158,6 +180,40 @@
         InvokeAsync(StateHasChanged);
     }
 
+    private void DecreaseFanSpeed()
+    {
+        StateService.FanMode = "Manual";
+        StateService.FanSpeed = Math.Max(0, StateService.FanSpeed - 1);
+    }
+
+    private void DecreaseWorkoutIntensity() => StateService.WorkoutIntensityPercent -= 5;
+
+    private void IncreaseWorkoutIntensity() => StateService.WorkoutIntensityPercent += 5;
+
+    private double GetFtpWattsPerKg() => StateService.Profile.Weight > 0
+        ? StateService.Profile.Ftp / StateService.Profile.Weight
+        : 0;
+
+    private void IncreaseFanSpeed()
+    {
+        StateService.FanMode = "Manual";
+        StateService.IsFanOn = true;
+        StateService.FanSpeed = Math.Min(5, StateService.FanSpeed + 1);
+    }
+
+    private void SelectFanMode(string mode)
+    {
+        StateService.IsFanOn = true;
+        StateService.FanMode = mode;
+    }
+
+    private string GetFanModeLabel() => StateService.FanMode switch
+    {
+        "HeartRate" => "Mode cardio",
+        "TrainerSpeed" => "Vitesse HT",
+        _ => "Mode manuel"
+    };
+
     private void SelectWorkout(Workout workout)
     {
         StateService.SelectWorkout(workout);
@@ -192,6 +248,66 @@
     {
         StateService.IsPowerSlopeEnabled = e.Value is bool enabled && enabled;
     }
+
+    private void SelectTrainerMode(string mode)
+    {
+        if (mode == "POWER_SLOPE")
+        {
+            StateService.IsPowerSlopeEnabled = true;
+            return;
+        }
+
+        StateService.IsPowerSlopeEnabled = false;
+        StateService.IsErgModeEnabled = mode == "ERG";
+        if (mode == "SLOPE")
+        {
+            StateService.TargetPower = 0;
+        }
+        StateService.TargetMode = mode;
+    }
+
+    private void DecreaseTrainerTarget()
+    {
+        StateService.TargetPower = Math.Max(GetTrainerTargetMinimum(), StateService.TargetPower - GetTrainerTargetStep());
+    }
+
+    private void IncreaseTrainerTarget()
+    {
+        StateService.TargetPower = Math.Min(GetTrainerTargetMaximum(), StateService.TargetPower + GetTrainerTargetStep());
+    }
+
+    private double GetTrainerTargetStep() => StateService.TargetMode switch
+    {
+        "ERG" => 5,
+        "RESISTANCE" => 1,
+        "SLOPE" => 0.5,
+        _ => 5
+    };
+
+    private double GetTrainerTargetMinimum() => StateService.TargetMode == "SLOPE" ? -20 : 0;
+
+    private double GetTrainerTargetMaximum() => StateService.TargetMode switch
+    {
+        "ERG" => 2_000,
+        "RESISTANCE" => 100,
+        "SLOPE" => 20,
+        _ => 2_000
+    };
+
+    private string GetTrainerTargetValue() => StateService.IsPowerSlopeEnabled
+        ? StateService.TargetGrade.ToString("F1")
+        : StateService.TargetMode == "SLOPE"
+        ? StateService.TargetPower.ToString("F1")
+        : StateService.TargetPower.ToString("F0");
+
+    private string GetTrainerTargetLabel() => StateService.TargetMode switch
+    {
+        "ERG" => "Cible ERG (W)",
+        "RESISTANCE" => "Résistance",
+        "SLOPE" => "Pente (%)",
+        "POWER_SLOPE" => "Pente auto (%)",
+        _ => "Consigne"
+    };
 
     private string GetBadgeClass(string type)
     {
