@@ -12,6 +12,7 @@ using Windows.Devices.Bluetooth.Advertisement;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Storage.Streams;
 using Windows.Devices.Enumeration;
+using System.Runtime.InteropServices.WindowsRuntime;
 #endif
 
 namespace Trainingify.Services;
@@ -26,15 +27,22 @@ public class TrainingStateService : IDisposable
     private BluetoothLEAdvertisementWatcher? _watcher;
     private BluetoothLEDevice? _controllableDevice;
     private GattCharacteristic? _ftmsCharacteristic;
+    private GattCharacteristic? _controlPointCharacteristic;
+    private GattCharacteristic? _wahooButtonsCharacteristic;
     private BluetoothLEDevice? _hrmDevice;
     private GattCharacteristic? _hrmCharacteristic;
     private BluetoothLEDevice? _fanDevice;
     private GattCharacteristic? _fanCharacteristic;
+    private readonly SemaphoreSlim _fanWriteSemaphore = new SemaphoreSlim(1, 1);
     private ushort? _lastCrankRevs;
     private ushort? _lastCrankEventTime;
 
     private static readonly Guid FtmsServiceUuid = Guid.Parse("00001826-0000-1000-8000-00805f9b34fb");
     private static readonly Guid IndoorBikeDataUuid = Guid.Parse("00002ad2-0000-1000-8000-00805f9b34fb");
+    private static readonly Guid ControlPointUuid = Guid.Parse("00002ad9-0000-1000-8000-00805f9b34fb");
+
+    private static readonly Guid WahooVirtualBikeServiceUuid = Guid.Parse("a026ee0d-0a7d-4ab3-97fa-f1500f9feb8b");
+    private static readonly Guid WahooButtonsCharacteristicUuid = Guid.Parse("a026e03c-0a7d-4ab3-97fa-f1500f9feb8b");
 
     private static readonly Guid CyclingPowerServiceUuid = Guid.Parse("00001818-0000-1000-8000-00805f9b34fb");
     private static readonly Guid CyclingPowerMeasurementUuid = Guid.Parse("00002a63-0000-1000-8000-00805f9b34fb");
@@ -58,16 +66,56 @@ public class TrainingStateService : IDisposable
     public List<Workout> AvailableWorkouts { get; private set; } = new();
     public Workout? ActiveWorkout { get; private set; }
     public List<int> WorkoutIntensityProfile { get; private set; } = new();
+    public List<WorkoutInterval> DisplayIntervals { get; private set; } = new();
+    public double TotalDurationSeconds => ActiveWorkout != null 
+        ? (ActiveWorkout.IsFtpPercentage ? WorkoutIntensityProfile.Count : ActiveWorkout.DurationMinutes * 60)
+        : 0;
+
+    // Active Training Plan Tracking
+    public TrainingPlan? ActiveTrainingPlan { get; private set; }
+    public TrainingPlanWorkout? ActivePlanWorkout { get; private set; }
 
     // Running State
     public bool IsWorkoutActive { get; private set; }
     public double ElapsedSeconds { get; private set; }
     public double IntervalSeconds { get; private set; }
     public int CurrentIntervalIndex { get; private set; }
+    public double Calories { get; private set; }
 
     // Target Power
-    public string TargetMode { get; set; } = "ERG"; // ERG, RESISTANCE, SLOPE
-    public double TargetPower { get; set; } = 200;
+    private string _targetMode = "ERG";
+    public string TargetMode
+    {
+        get => _targetMode;
+        set
+        {
+            if (_targetMode != value)
+            {
+                _targetMode = value;
+                NotifyStateChanged();
+#if WINDOWS
+                _ = UpdateTrainerTargetAsync();
+#endif
+            }
+        }
+    }
+
+    private double _targetPower = 200;
+    public double TargetPower
+    {
+        get => _targetPower;
+        set
+        {
+            if (_targetPower != value)
+            {
+                _targetPower = value;
+                NotifyStateChanged();
+#if WINDOWS
+                _ = UpdateTrainerTargetAsync();
+#endif
+            }
+        }
+    }
 
     // Real-time Metrics
     public double Power { get; private set; }
@@ -155,7 +203,7 @@ public class TrainingStateService : IDisposable
         get => _fanConnected;
         set
         {
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] FanConnected setter called with value: {value} (current backing field: {_fanConnected}, SelectedFanId: '{SelectedFanId}')");
+            Console.WriteLine($"[Fan BLE] FanConnected setter called with value: {value} (current backing field: {_fanConnected}, SelectedFanId: '{SelectedFanId}')");
             if (_fanConnected != value)
             {
                 _fanConnected = value;
@@ -261,7 +309,11 @@ public class TrainingStateService : IDisposable
 
         // Load Workouts
         AvailableWorkouts = await context.Workouts.ToListAsync();
-        if (AvailableWorkouts.Any())
+        
+        // Load active training plan if it exists
+        await LoadActiveTrainingPlanAsync();
+
+        if (ActiveWorkout == null && AvailableWorkouts.Any())
         {
             SelectWorkout(AvailableWorkouts.First());
         }
@@ -339,6 +391,7 @@ public class TrainingStateService : IDisposable
         ElapsedSeconds = 0;
         IntervalSeconds = 0;
         CurrentIntervalIndex = 0;
+        Calories = 0;
         IsWorkoutActive = false;
 
         // Parse intensity profile from JSON
@@ -355,17 +408,45 @@ public class TrainingStateService : IDisposable
                     .Select(s => int.Parse(s.Trim()))
                     .ToList();
             }
+
+            // Scale target powers if this workout is marked as FTP percentage based
+            if (workout.IsFtpPercentage)
+            {
+                var ftp = Profile.Ftp;
+                if (ftp <= 0) ftp = 250;
+                WorkoutIntensityProfile = WorkoutIntensityProfile
+                    .Select(p => (int)Math.Round(p * ftp / 100.0))
+                    .ToList();
+            }
         }
         catch
         {
             WorkoutIntensityProfile = new List<int> { 150 };
         }
 
+        // Populate DisplayIntervals (combine consecutive identical powers)
+        DisplayIntervals.Clear();
         if (WorkoutIntensityProfile.Any())
         {
-            TargetPower = WorkoutIntensityProfile.First();
+            int currentPower = WorkoutIntensityProfile[0];
+            int currentDuration = 1;
+            for (int i = 1; i < WorkoutIntensityProfile.Count; i++)
+            {
+                if (WorkoutIntensityProfile[i] == currentPower)
+                {
+                    currentDuration++;
+                }
+                else
+                {
+                    DisplayIntervals.Add(new WorkoutInterval { TargetPower = currentPower, DurationSeconds = currentDuration });
+                    currentPower = WorkoutIntensityProfile[i];
+                    currentDuration = 1;
+                }
+            }
+            DisplayIntervals.Add(new WorkoutInterval { TargetPower = currentPower, DurationSeconds = currentDuration });
         }
 
+        UpdateActiveStepState();
         NotifyStateChanged();
     }
 
@@ -390,35 +471,62 @@ public class TrainingStateService : IDisposable
 
     public void SkipInterval()
     {
-        if (WorkoutIntensityProfile.Count > 0)
+        if (ActiveWorkout == null || WorkoutIntensityProfile.Count == 0) return;
+
+        if (ActiveWorkout.IsFtpPercentage)
         {
-            CurrentIntervalIndex = (CurrentIntervalIndex + 1) % WorkoutIntensityProfile.Count;
-            TargetPower = WorkoutIntensityProfile[CurrentIntervalIndex];
-            IntervalSeconds = 0;
-            NotifyStateChanged();
+            int accum = 0;
+            bool found = false;
+            for (int i = 0; i < DisplayIntervals.Count; i++)
+            {
+                accum += DisplayIntervals[i].DurationSeconds;
+                if (ElapsedSeconds < accum)
+                {
+                    ElapsedSeconds = accum;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found || ElapsedSeconds >= WorkoutIntensityProfile.Count)
+            {
+                CompleteActiveWorkout();
+                return;
+            }
         }
+        else
+        {
+            // Original logic: advance to the next 60-second block
+            int nextInterval = (int)(ElapsedSeconds / 60) + 1;
+            ElapsedSeconds = nextInterval * 60;
+            if (ElapsedSeconds >= TotalDurationSeconds)
+            {
+                CompleteActiveWorkout();
+                return;
+            }
+        }
+
+        UpdateActiveStepState();
+        NotifyStateChanged();
     }
 
     private void Tick(object? state)
     {
+        if (ActiveWorkout == null) return;
+
         ElapsedSeconds++;
-        IntervalSeconds++;
+        Calories += (Power * 1.0) / 1000.0;
 
         // Simulating data updates
         SimulateMetrics();
 
-        // Check interval transitions (e.g. change every 5 minutes in simulation, or simple progress)
-        // For structured workouts, lets change interval every 60 seconds in our UI simulator so the user sees the transitions happen.
-        if (IntervalSeconds >= 60) 
+        // Check if workout has finished
+        if (ElapsedSeconds >= TotalDurationSeconds)
         {
-            IntervalSeconds = 0;
-            if (WorkoutIntensityProfile.Count > 0)
-            {
-                CurrentIntervalIndex = (CurrentIntervalIndex + 1) % WorkoutIntensityProfile.Count;
-                TargetPower = WorkoutIntensityProfile[CurrentIntervalIndex];
-            }
+            CompleteActiveWorkout();
+            return;
         }
 
+        UpdateActiveStepState();
         NotifyStateChanged();
     }
 
@@ -488,8 +596,15 @@ public class TrainingStateService : IDisposable
 
         if (CoreTempConnected)
         {
-            CoreTemp = Math.Round(37.2 + (Power / Profile.Ftp) * 1.2 + (_random.NextDouble() * 0.1), 1);
-            SkinTemp = Math.Round(32.5 + (_random.NextDouble() * 0.5 - 0.25), 1);
+            double coolingEffect = 0.0;
+            if (FanConnected && IsFanOn)
+            {
+                // Each level of fan speed cools down the rider by 0.1°C (up to 0.5°C at level 5)
+                coolingEffect = FanSpeed * 0.1;
+            }
+
+            CoreTemp = Math.Round(37.2 + (Power / Profile.Ftp) * 1.2 - coolingEffect + (_random.NextDouble() * 0.1), 1);
+            SkinTemp = Math.Round(32.5 - (coolingEffect * 1.5) + (_random.NextDouble() * 0.5 - 0.25), 1);
         }
         else
         {
@@ -657,7 +772,7 @@ public class TrainingStateService : IDisposable
         get => _selectedFanId;
         set
         {
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] SelectedFanId setter called with value: '{value}' (current backing field: '{_selectedFanId}', FanConnected: {FanConnected})");
+            Console.WriteLine($"[Fan BLE] SelectedFanId setter called with value: '{value}' (current backing field: '{_selectedFanId}', FanConnected: {FanConnected})");
             if (_selectedFanId != value)
             {
                 _selectedFanId = value;
@@ -758,32 +873,7 @@ public class TrainingStateService : IDisposable
         await Task.Delay(1500); // Simulate scan latency
 #endif
 
-        if (protocol == "All" || protocol == "Bluetooth")
-        {
-            DiscoveredDevices.AddRange(new[]
-            {
-                new DiscoveredDevice { Name = "Tacx Neo T2900", Protocol = "Bluetooth", Address = "Tacx-T2900-BLE-7548", DeviceType = "Controllable", Rssi = -62 },
-                new DiscoveredDevice { Name = "Wahoo KICKR v5", Protocol = "Bluetooth", Address = "KICKR-BLE-2894", DeviceType = "Controllable", Rssi = -71 },
-                new DiscoveredDevice { Name = "Polar H10", Protocol = "Bluetooth", Address = "Polar-H10-BLE-3948", DeviceType = "HRM", Rssi = -55 },
-                new DiscoveredDevice { Name = "Moxy Muscle O2", Protocol = "Bluetooth", Address = "Moxy-BLE-1948", DeviceType = "Moxy", Rssi = -68 },
-                new DiscoveredDevice { Name = "Core Temp Sensor", Protocol = "Bluetooth", Address = "Core-BLE-2849", DeviceType = "CoreTemp", Rssi = -60 },
-                new DiscoveredDevice { Name = "Wahoo Headwind", Protocol = "Bluetooth", Address = "Wahoo-Headwind-BLE-1849", DeviceType = "Fan", Rssi = -58 }
-            });
-        }
-        if (protocol == "All" || protocol == "ANT+")
-        {
-            DiscoveredDevices.AddRange(new[]
-            {
-                new DiscoveredDevice { Name = "Tacx Trainer (ANT+)", Protocol = "ANT+", Address = "Tacx-T2900-ANT-48591", DeviceType = "Controllable", Rssi = 85 },
-                new DiscoveredDevice { Name = "KICKR Smart (ANT+)", Protocol = "ANT+", Address = "KICKR-ANT-10928", DeviceType = "Controllable", Rssi = 78 },
-                new DiscoveredDevice { Name = "Polar H10 (ANT+)", Protocol = "ANT+", Address = "Polar-H10-ANT-62841", DeviceType = "HRM", Rssi = 90 },
-                new DiscoveredDevice { Name = "Garmin HRM-Pro (ANT+)", Protocol = "ANT+", Address = "Garmin-HRM-ANT-93847", DeviceType = "HRM", Rssi = 82 },
-                new DiscoveredDevice { Name = "Moxy Muscle (ANT+)", Protocol = "ANT+", Address = "Moxy-ANT-49281", DeviceType = "Moxy", Rssi = 75 },
-                new DiscoveredDevice { Name = "Core Temp (ANT+)", Protocol = "ANT+", Address = "Core-ANT-74928", DeviceType = "CoreTemp", Rssi = 80 },
-                new DiscoveredDevice { Name = "Wahoo Headwind (ANT+)", Protocol = "ANT+", Address = "Wahoo-Headwind-ANT-3948", DeviceType = "Fan", Rssi = 82 }
-            });
-        }
-        
+        IsScanning = false;
         NotifyStateChanged();
     }
 
@@ -791,44 +881,98 @@ public class TrainingStateService : IDisposable
     private void OnAdvertisementReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
     {
         var localName = args.Advertisement.LocalName;
-        if (string.IsNullOrEmpty(localName)) return;
-
+        
         string deviceType = "Controllable"; // Default
-        if (localName.Contains("KICKR", StringComparison.OrdinalIgnoreCase) || 
-            localName.Contains("Tacx", StringComparison.OrdinalIgnoreCase) || 
-            localName.Contains("Trainer", StringComparison.OrdinalIgnoreCase) ||
-            localName.Contains("Bike", StringComparison.OrdinalIgnoreCase))
+        bool identified = false;
+
+        if (!string.IsNullOrEmpty(localName))
         {
-            deviceType = "Controllable";
+            if (localName.Contains("KICKR", StringComparison.OrdinalIgnoreCase) || 
+                localName.Contains("Tacx", StringComparison.OrdinalIgnoreCase) || 
+                localName.Contains("Trainer", StringComparison.OrdinalIgnoreCase) ||
+                localName.Contains("Bike", StringComparison.OrdinalIgnoreCase))
+            {
+                deviceType = "Controllable";
+                identified = true;
+            }
+            else if (localName.Contains("Polar", StringComparison.OrdinalIgnoreCase) || 
+                     localName.Contains("HRM", StringComparison.OrdinalIgnoreCase) || 
+                     localName.Contains("H10", StringComparison.OrdinalIgnoreCase) ||
+                     localName.Contains("Heart", StringComparison.OrdinalIgnoreCase))
+            {
+                deviceType = "HRM";
+                identified = true;
+            }
+            else if (localName.Contains("Moxy", StringComparison.OrdinalIgnoreCase))
+            {
+                deviceType = "Moxy";
+                identified = true;
+            }
+            else if (localName.Contains("Core", StringComparison.OrdinalIgnoreCase))
+            {
+                deviceType = "CoreTemp";
+                identified = true;
+            }
+            else if (localName.Contains("Headwind", StringComparison.OrdinalIgnoreCase) ||
+                     localName.Contains("Fan", StringComparison.OrdinalIgnoreCase))
+            {
+                deviceType = "Fan";
+                identified = true;
+            }
         }
-        else if (localName.Contains("Polar", StringComparison.OrdinalIgnoreCase) || 
-                 localName.Contains("HRM", StringComparison.OrdinalIgnoreCase) || 
-                 localName.Contains("H10", StringComparison.OrdinalIgnoreCase) ||
-                 localName.Contains("Heart", StringComparison.OrdinalIgnoreCase))
+
+        // If not identified by name, try to identify by Service UUIDs in the advertisement
+        if (!identified)
         {
-            deviceType = "HRM";
+            var uuids = args.Advertisement.ServiceUuids;
+            if (uuids.Contains(FtmsServiceUuid) || uuids.Contains(CyclingPowerServiceUuid))
+            {
+                deviceType = "Controllable";
+                identified = true;
+                if (string.IsNullOrEmpty(localName))
+                {
+                    localName = uuids.Contains(FtmsServiceUuid) ? "Wahoo KICKR Bike (FTMS)" : "Wahoo KICKR Bike (Power)";
+                }
+            }
+            else if (uuids.Contains(HeartRateServiceUuid))
+            {
+                deviceType = "HRM";
+                identified = true;
+                if (string.IsNullOrEmpty(localName))
+                {
+                    localName = "Cardiofréquencemètre BLE";
+                }
+            }
+            else if (uuids.Contains(FanServiceUuid))
+            {
+                deviceType = "Fan";
+                identified = true;
+                if (string.IsNullOrEmpty(localName))
+                {
+                    localName = "Wahoo Headwind (Fan)";
+                }
+            }
         }
-        else if (localName.Contains("Moxy", StringComparison.OrdinalIgnoreCase))
-        {
-            deviceType = "Moxy";
-        }
-        else if (localName.Contains("Core", StringComparison.OrdinalIgnoreCase))
-        {
-            deviceType = "CoreTemp";
-        }
-        else if (localName.Contains("Headwind", StringComparison.OrdinalIgnoreCase) ||
-                 localName.Contains("Fan", StringComparison.OrdinalIgnoreCase))
-        {
-            deviceType = "Fan";
-        }
+
+        if (!identified || string.IsNullOrEmpty(localName)) return;
 
         var addressStr = args.BluetoothAddress.ToString("X");
         System.Diagnostics.Debug.WriteLine($"[BLE Scan] Found device: '{localName}' ({addressStr}) - Type: {deviceType}");
         
         lock (DiscoveredDevices)
         {
-            if (DiscoveredDevices.Any(d => d.Address == addressStr && d.DeviceType == deviceType))
+            var existing = DiscoveredDevices.FirstOrDefault(d => d.Address == addressStr && d.DeviceType == deviceType);
+            if (existing != null)
+            {
+                // If the existing name is generic/fallback, and we got a real name now, update it
+                if ((existing.Name.Contains("FTMS") || existing.Name.Contains("Power") || existing.Name.Contains("BLE") || existing.Name.Contains("Fan")) && 
+                    !string.IsNullOrEmpty(args.Advertisement.LocalName))
+                {
+                    existing.Name = args.Advertisement.LocalName;
+                    NotifyStateChanged();
+                }
                 return;
+            }
 
             DiscoveredDevices.Add(new DiscoveredDevice
             {
@@ -836,8 +980,10 @@ public class TrainingStateService : IDisposable
                 Protocol = "Bluetooth",
                 Address = addressStr,
                 DeviceType = deviceType,
-                Rssi = args.RawSignalStrengthInDBm
+                Rssi = args.RawSignalStrengthInDBm,
+                BluetoothAddressType = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041) ? (uint)args.BluetoothAddressType : 0
             });
+            NotifyStateChanged();
         }
     }
 
@@ -857,7 +1003,10 @@ public class TrainingStateService : IDisposable
                 return;
             }
 
-            _controllableDevice = await BluetoothLEDevice.FromBluetoothAddressAsync(address);
+            var discoveredDev = DiscoveredDevices.FirstOrDefault(d => d.Address == SelectedControllableId && d.DeviceType == "Controllable");
+            var addressType = discoveredDev != null ? (BluetoothAddressType)discoveredDev.BluetoothAddressType : BluetoothAddressType.Public;
+            
+            _controllableDevice = await GetBluetoothDeviceAsync(address, addressType);
             if (_controllableDevice == null)
             {
                 ControllableConnectionStatus = "Appareil introuvable";
@@ -894,6 +1043,68 @@ public class TrainingStateService : IDisposable
                     if (status == GattCommunicationStatus.Success)
                     {
                         ControllableConnectionStatus = "Connecté (FTMS)";
+
+                        // Configure Control Point for sending targets (power, slope, resistance)
+                        try
+                        {
+                            var cpResult = await ftmsService.GetCharacteristicsForUuidAsync(ControlPointUuid);
+                            if (cpResult.Status == GattCommunicationStatus.Success && cpResult.Characteristics.Count > 0)
+                            {
+                                _controlPointCharacteristic = cpResult.Characteristics[0];
+                                _controlPointCharacteristic.ValueChanged += OnControlPointValueChanged;
+                                var cpStatus = await _controlPointCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+                                    GattClientCharacteristicConfigurationDescriptorValue.Indicate);
+                                
+                                if (cpStatus == GattCommunicationStatus.Success)
+                                {
+                                    Console.WriteLine("[Trainer Control] Control Point configuré avec succès. Acquisition du contrôle...");
+                                    // Envoyer Request Control opcode (0x00) suivi de Request ID (0x01)
+                                    var buffer = new byte[] { 0x00, 0x01 }.AsBuffer();
+                                    await _controlPointCharacteristic.WriteValueAsync(buffer, GattWriteOption.WriteWithResponse);
+
+                                    // Envoyer la première consigne cible
+                                    _ = UpdateTrainerTargetAsync();
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"[Trainer Control] Échec de l'abonnement aux indications du Control Point : {cpStatus}");
+                                }
+                            }
+                        }
+                        catch (Exception cpEx)
+                        {
+                            Console.WriteLine($"[Trainer Control] Erreur lors de la configuration du Control Point : {cpEx.Message}");
+                        }
+
+                        // Configurer l'écoute des boutons propriétaires Wahoo
+                        try
+                        {
+                            var wahooService = servicesResult.Services.FirstOrDefault(s => s.Uuid == WahooVirtualBikeServiceUuid);
+                            if (wahooService != null)
+                            {
+                                var buttonCharResult = await wahooService.GetCharacteristicsForUuidAsync(WahooButtonsCharacteristicUuid);
+                                if (buttonCharResult.Status == GattCommunicationStatus.Success && buttonCharResult.Characteristics.Count > 0)
+                                {
+                                    _wahooButtonsCharacteristic = buttonCharResult.Characteristics[0];
+                                    _wahooButtonsCharacteristic.ValueChanged += OnWahooButtonsValueChanged;
+                                    var buttonStatus = await _wahooButtonsCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+                                        GattClientCharacteristicConfigurationDescriptorValue.Notify);
+                                    
+                                    if (buttonStatus == GattCommunicationStatus.Success)
+                                    {
+                                        Console.WriteLine("[Wahoo Buttons] Connecté avec succès au service de boutons Wahoo !");
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine($"[Wahoo Buttons] Échec abonnement notifications boutons : {buttonStatus}");
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception wahooEx)
+                        {
+                            Console.WriteLine($"[Wahoo Buttons] Erreur de connexion aux boutons Wahoo : {wahooEx.Message}");
+                        }
                     }
                     else
                     {
@@ -954,11 +1165,107 @@ public class TrainingStateService : IDisposable
                     GattClientCharacteristicConfigurationDescriptorValue.None);
                 _ftmsCharacteristic = null;
             }
+            if (_controlPointCharacteristic != null)
+            {
+                _controlPointCharacteristic.ValueChanged -= OnControlPointValueChanged;
+                _ = _controlPointCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+                    GattClientCharacteristicConfigurationDescriptorValue.None);
+                _controlPointCharacteristic = null;
+            }
+            if (_wahooButtonsCharacteristic != null)
+            {
+                _wahooButtonsCharacteristic.ValueChanged -= OnWahooButtonsValueChanged;
+                _ = _wahooButtonsCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+                    GattClientCharacteristicConfigurationDescriptorValue.None);
+                _wahooButtonsCharacteristic = null;
+            }
             _controllableDevice?.Dispose();
             _controllableDevice = null;
         }
         catch {}
         ControllableConnectionStatus = "Déconnecté";
+    }
+
+    private void OnControlPointValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
+    {
+#if WINDOWS
+        try
+        {
+            var reader = DataReader.FromBuffer(args.CharacteristicValue);
+            reader.ByteOrder = ByteOrder.LittleEndian;
+            var data = new byte[args.CharacteristicValue.Length];
+            reader.ReadBytes(data);
+            string hex = BitConverter.ToString(data);
+            Console.WriteLine($"[Trainer Control] Indication reçue du Control Point : {hex}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Trainer Control] Erreur lors de la lecture de la réponse du Control Point : {ex.Message}");
+        }
+#endif
+    }
+
+    private void OnWahooButtonsValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
+    {
+#if WINDOWS
+        try
+        {
+            var reader = DataReader.FromBuffer(args.CharacteristicValue);
+            reader.ByteOrder = ByteOrder.LittleEndian;
+            var data = new byte[args.CharacteristicValue.Length];
+            reader.ReadBytes(data);
+            string hex = BitConverter.ToString(data);
+            Console.WriteLine($"[Wahoo Buttons] État boutons reçu : {hex}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Wahoo Buttons] Erreur lors de la lecture des boutons Wahoo : {ex.Message}");
+        }
+#endif
+    }
+
+    private async Task UpdateTrainerTargetAsync()
+    {
+#if WINDOWS
+        if (_controlPointCharacteristic == null) return;
+
+        try
+        {
+            byte[] payload;
+            if (_targetMode == "ERG")
+            {
+                // Target Power (Opcode 0x05, sint16 en Watts)
+                short power = (short)Math.Clamp(_targetPower, 0.0, 2000.0);
+                payload = new byte[] { 0x05, (byte)(power & 0xFF), (byte)((power >> 8) & 0xFF) };
+            }
+            else if (_targetMode == "SLOPE")
+            {
+                // Target Inclination (Opcode 0x03, sint16 en dixièmes de pourcent 0.1%)
+                short inclination = (short)Math.Clamp(Math.Round(_targetPower * 10), -200, 200); // Clampe entre -20% et +20%
+                payload = new byte[] { 0x03, (byte)(inclination & 0xFF), (byte)((inclination >> 8) & 0xFF) };
+            }
+            else if (_targetMode == "RESISTANCE")
+            {
+                // Target Resistance (Opcode 0x04, uint8/sint8)
+                byte resistance = (byte)Math.Clamp(_targetPower, 0.0, 100.0);
+                payload = new byte[] { 0x04, resistance };
+            }
+            else
+            {
+                return;
+            }
+
+            var buffer = payload.AsBuffer();
+            var status = await _controlPointCharacteristic.WriteValueAsync(buffer, GattWriteOption.WriteWithResponse);
+            Console.WriteLine($"[Trainer Control] Consigne envoyée - Opcode 0x{payload[0]:X2}, Mode : {_targetMode}, Valeur : {_targetPower}, Résultat Bluetooth : {status}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Trainer Control] Erreur d'envoi de la consigne au trainer : {ex.Message}");
+        }
+#else
+        await Task.CompletedTask;
+#endif
     }
 
     private void OnFtmsValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
@@ -1148,7 +1455,10 @@ public class TrainingStateService : IDisposable
                 return;
             }
 
-            _hrmDevice = await BluetoothLEDevice.FromBluetoothAddressAsync(address);
+            var discoveredDev = DiscoveredDevices.FirstOrDefault(d => d.Address == SelectedHrmId && d.DeviceType == "HRM");
+            var addressType = discoveredDev != null ? (BluetoothAddressType)discoveredDev.BluetoothAddressType : BluetoothAddressType.Public;
+            
+            _hrmDevice = await GetBluetoothDeviceAsync(address, addressType);
             if (_hrmDevice == null)
             {
                 HrmConnectionStatus = "Appareil introuvable";
@@ -1256,10 +1566,10 @@ public class TrainingStateService : IDisposable
 
     private async void ConnectFanAsync()
     {
-        System.Diagnostics.Debug.WriteLine($"[Fan BLE] ConnectFanAsync called for SelectedFanId: '{SelectedFanId}'");
+        Console.WriteLine($"[Fan BLE] ConnectFanAsync called for SelectedFanId: '{SelectedFanId}'");
         if (string.IsNullOrEmpty(SelectedFanId))
         {
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] SelectedFanId is null or empty");
+            Console.WriteLine($"[Fan BLE] SelectedFanId is null or empty");
             return;
         }
 
@@ -1267,59 +1577,53 @@ public class TrainingStateService : IDisposable
         {
             if (!ulong.TryParse(SelectedFanId, System.Globalization.NumberStyles.HexNumber, null, out ulong address))
             {
-                System.Diagnostics.Debug.WriteLine($"[Fan BLE] SelectedFanId '{SelectedFanId}' is not a valid hex ulong address");
+                Console.WriteLine($"[Fan BLE] SelectedFanId '{SelectedFanId}' is not a valid hex ulong address");
                 return;
             }
 
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Connecting to address {address:X}...");
-            _fanDevice = await BluetoothLEDevice.FromBluetoothAddressAsync(address);
+            Console.WriteLine($"[Fan BLE] Connecting to address {address:X}...");
+            var discoveredDev = DiscoveredDevices.FirstOrDefault(d => d.Address == SelectedFanId && d.DeviceType == "Fan");
+            var addressType = discoveredDev != null ? (BluetoothAddressType)discoveredDev.BluetoothAddressType : BluetoothAddressType.Public;
+            Console.WriteLine($"[Fan BLE] Using address type: {addressType}");
+
+            _fanDevice = await GetBluetoothDeviceAsync(address, addressType);
             if (_fanDevice == null)
             {
-                System.Diagnostics.Debug.WriteLine($"[Fan BLE] FromBluetoothAddressAsync returned null device");
+                Console.WriteLine($"[Fan BLE] GetBluetoothDeviceAsync returned null device");
                 return;
             }
 
             // Check and attempt pairing if needed
             if (!_fanDevice.DeviceInformation.Pairing.IsPaired)
             {
-                System.Diagnostics.Debug.WriteLine("[Fan BLE] Device is not paired in Windows. Attempting programmatic pairing...");
+                Console.WriteLine("[Fan BLE] Device is not paired in Windows. Attempting programmatic pairing...");
                 var pairingResult = await _fanDevice.DeviceInformation.Pairing.PairAsync();
-                System.Diagnostics.Debug.WriteLine($"[Fan BLE] Programmatic pairing result status: {pairingResult.Status}");
+                Console.WriteLine($"[Fan BLE] Programmatic pairing result status: {pairingResult.Status}");
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine("[Fan BLE] Device is already paired in Windows.");
+                Console.WriteLine("[Fan BLE] Device is already paired in Windows.");
             }
 
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Device connected. Querying services...");
+            Console.WriteLine($"[Fan BLE] Device connected. Querying services...");
             var servicesResult = await _fanDevice.GetGattServicesAsync(BluetoothCacheMode.Uncached);
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] GetGattServicesAsync status: {servicesResult.Status}");
+            Console.WriteLine($"[Fan BLE] GetGattServicesAsync status: {servicesResult.Status}");
             if (servicesResult.Status != GattCommunicationStatus.Success) return;
 
             GattCharacteristic? foundChar = null;
 
             foreach (var service in servicesResult.Services)
             {
-                System.Diagnostics.Debug.WriteLine($"[Fan BLE] Service found: {service.Uuid}");
+                Console.WriteLine($"[Fan BLE] Service found: {service.Uuid}");
                 if (service.Uuid.ToString().StartsWith("a026", StringComparison.OrdinalIgnoreCase))
                 {
-                    var charResult = await service.GetCharacteristicsAsync(BluetoothCacheMode.Uncached);
-                    System.Diagnostics.Debug.WriteLine($"[Fan BLE]   GetCharacteristicsAsync for service {service.Uuid} status: {charResult.Status}");
-                    if (charResult.Status == GattCommunicationStatus.Success)
+                    var charResult = await service.GetCharacteristicsForUuidAsync(FanControlUuid);
+                    Console.WriteLine($"[Fan BLE]   GetCharacteristicsForUuidAsync for service {service.Uuid} status: {charResult.Status}");
+                    if (charResult.Status == GattCommunicationStatus.Success && charResult.Characteristics.Count > 0)
                     {
-                        foreach (var c in charResult.Characteristics)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[Fan BLE]   Characteristic found under {service.Uuid}: {c.Uuid} (Properties: {c.CharacteristicProperties})");
-                            
-                            // Check if this characteristic is writable
-                            if (foundChar == null && 
-                                (c.CharacteristicProperties.HasFlag(GattCharacteristicProperties.Write) || 
-                                 c.CharacteristicProperties.HasFlag(GattCharacteristicProperties.WriteWithoutResponse)))
-                            {
-                                foundChar = c;
-                                System.Diagnostics.Debug.WriteLine($"[Fan BLE]   Selected as candidate control characteristic: {c.Uuid}");
-                            }
-                        }
+                        foundChar = charResult.Characteristics[0];
+                        Console.WriteLine($"[Fan BLE]   Selected control characteristic: {foundChar.Uuid}");
+                        break;
                     }
                 }
             }
@@ -1327,7 +1631,7 @@ public class TrainingStateService : IDisposable
             if (foundChar != null)
             {
                 _fanCharacteristic = foundChar;
-                System.Diagnostics.Debug.WriteLine($"[Fan BLE] Characteristic {_fanCharacteristic.Uuid} selected for control!");
+                Console.WriteLine($"[Fan BLE] Characteristic {_fanCharacteristic.Uuid} selected for control!");
                 
                 // Once connected, write initial mode and speed
                 await WriteFanModeAsync(FanMode);
@@ -1342,18 +1646,18 @@ public class TrainingStateService : IDisposable
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine($"[Fan BLE] No writable characteristic found under any a026* service.");
+                Console.WriteLine($"[Fan BLE] No writable characteristic found under any a026* service.");
             }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Error connecting to fan: {ex.Message}");
+            Console.WriteLine($"[Fan BLE] Error connecting to fan: {ex.Message}");
         }
     }
 
     private void DisconnectFan()
     {
-        System.Diagnostics.Debug.WriteLine($"[Fan BLE] DisconnectFan called");
+        Console.WriteLine($"[Fan BLE] DisconnectFan called");
         try
         {
             if (_fanCharacteristic != null)
@@ -1362,23 +1666,24 @@ public class TrainingStateService : IDisposable
             }
             _fanDevice?.Dispose();
             _fanDevice = null;
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Fan disconnected and resources disposed");
+            Console.WriteLine($"[Fan BLE] Fan disconnected and resources disposed");
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Error disconnecting: {ex.Message}");
+            Console.WriteLine($"[Fan BLE] Error disconnecting: {ex.Message}");
         }
     }
 
     private async Task WriteFanModeAsync(string mode)
     {
-        System.Diagnostics.Debug.WriteLine($"[Fan BLE] WriteFanModeAsync called with mode: '{mode}'");
+        Console.WriteLine($"[Fan BLE] WriteFanModeAsync called with mode: '{mode}'");
         if (_fanCharacteristic == null)
         {
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Cannot write mode. _fanCharacteristic is null (fan not connected)");
+            Console.WriteLine($"[Fan BLE] Cannot write mode. _fanCharacteristic is null (fan not connected)");
             return;
         }
 
+        await _fanWriteSemaphore.WaitAsync();
         try
         {
             byte[] value = mode switch
@@ -1388,54 +1693,509 @@ public class TrainingStateService : IDisposable
                 _ => new byte[] { 0x04, 0x04 } // "Manual"
             };
 
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Writing mode command bytes: {BitConverter.ToString(value)} to characteristic...");
+            Console.WriteLine($"[Fan BLE] Writing mode command bytes: {BitConverter.ToString(value)} to characteristic...");
             var writer = new DataWriter();
             writer.WriteBytes(value);
             var result = await _fanCharacteristic.WriteValueAsync(writer.DetachBuffer());
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Mode write operation completed with result: {result}");
+            Console.WriteLine($"[Fan BLE] Mode write operation completed with result: {result}");
+            
+            // Allow the fan's microcontroler a short time to process the mode transition
+            await Task.Delay(150);
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Error writing fan mode: {ex.Message}");
+            Console.WriteLine($"[Fan BLE] Error writing fan mode: {ex.Message}");
+        }
+        finally
+        {
+            _fanWriteSemaphore.Release();
         }
     }
 
     private async Task WriteFanSpeedAsync(int speedLevel)
     {
-        System.Diagnostics.Debug.WriteLine($"[Fan BLE] WriteFanSpeedAsync called with speedLevel: {speedLevel}");
+        Console.WriteLine($"[Fan BLE] WriteFanSpeedAsync called with speedLevel: {speedLevel}");
         if (_fanCharacteristic == null)
         {
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Cannot write speed. _fanCharacteristic is null (fan not connected)");
+            Console.WriteLine($"[Fan BLE] Cannot write speed. _fanCharacteristic is null (fan not connected)");
             return;
+        }
+
+        await _fanWriteSemaphore.WaitAsync();
+        try
+        {
+            // Map the app speed level (0-5) to Headwind physical levels (0-4)
+            byte fanLevel = speedLevel switch
+            {
+                0 => 0,
+                1 => 1,
+                2 => 2,
+                3 => 3,
+                4 => 4,
+                5 => 4,
+                _ => 0
+            };
+
+            byte[] value = new byte[] { 0x02, fanLevel };
+
+            Console.WriteLine($"[Fan BLE] Writing speed command bytes: {BitConverter.ToString(value)} to characteristic (level {speedLevel} -> level {fanLevel})...");
+            var writer = new DataWriter();
+            writer.WriteBytes(value);
+            var result = await _fanCharacteristic.WriteValueAsync(writer.DetachBuffer());
+            Console.WriteLine($"[Fan BLE] Speed write operation completed with result: {result}");
+            
+            // Allow the fan's microcontroller a short time to update its speed setpoint
+            await Task.Delay(150);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Fan BLE] Error writing fan speed: {ex.Message}");
+        }
+        finally
+        {
+            _fanWriteSemaphore.Release();
+        }
+    }
+
+    private async Task<BluetoothLEDevice?> GetBluetoothDeviceAsync(ulong address, BluetoothAddressType addressType)
+    {
+        try
+        {
+            Console.WriteLine($"[BLE] Getting BluetoothLEDevice for address {address:X} with primary address type {addressType}...");
+            var device = await BluetoothLEDevice.FromBluetoothAddressAsync(address, addressType);
+            if (device != null)
+            {
+                Console.WriteLine($"[BLE] Successfully connected using primary address type: {addressType}");
+                return device;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[BLE] Error with primary address type {addressType}: {ex.Message}");
+        }
+
+        var fallbackType = addressType == BluetoothAddressType.Public ? BluetoothAddressType.Random : BluetoothAddressType.Public;
+        try
+        {
+            Console.WriteLine($"[BLE] Retrying with fallback address type: {fallbackType}...");
+            var device = await BluetoothLEDevice.FromBluetoothAddressAsync(address, fallbackType);
+            if (device != null)
+            {
+                Console.WriteLine($"[BLE] Successfully connected using fallback address type: {fallbackType}");
+                return device;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[BLE] Error with fallback address type {fallbackType}: {ex.Message}");
         }
 
         try
         {
-            byte speedPercentage = speedLevel switch
+            Console.WriteLine($"[BLE] Retrying without specifying address type...");
+            var device = await BluetoothLEDevice.FromBluetoothAddressAsync(address);
+            if (device != null)
             {
-                0 => 0,
-                1 => 20,
-                2 => 40,
-                3 => 60,
-                4 => 80,
-                5 => 100,
-                _ => 0
-            };
-
-            byte[] value = new byte[] { 0x02, speedPercentage };
-
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Writing speed command bytes: {BitConverter.ToString(value)} to characteristic (level {speedLevel} -> {speedPercentage}%)...");
-            var writer = new DataWriter();
-            writer.WriteBytes(value);
-            var result = await _fanCharacteristic.WriteValueAsync(writer.DetachBuffer());
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Speed write operation completed with result: {result}");
+                Console.WriteLine($"[BLE] Successfully connected without specifying address type");
+                return device;
+            }
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[Fan BLE] Error writing fan speed: {ex.Message}");
+            Console.WriteLine($"[BLE] Error without address type: {ex.Message}");
         }
+
+        Console.WriteLine($"[BLE] Failed to get BluetoothLEDevice for address {address:X}");
+        return null;
     }
 #endif
+
+    private void UpdateActiveStepState()
+    {
+        if (ActiveWorkout == null || WorkoutIntensityProfile.Count == 0) return;
+
+        if (ActiveWorkout.IsFtpPercentage)
+        {
+            var idx = (int)ElapsedSeconds;
+            if (idx >= WorkoutIntensityProfile.Count) idx = WorkoutIntensityProfile.Count - 1;
+            TargetPower = WorkoutIntensityProfile[idx];
+
+            int accum = 0;
+            int activeIndex = 0;
+            int intervalElapsed = 0;
+            for (int i = 0; i < DisplayIntervals.Count; i++)
+            {
+                var nextAccum = accum + DisplayIntervals[i].DurationSeconds;
+                if (ElapsedSeconds < nextAccum)
+                {
+                    activeIndex = i;
+                    intervalElapsed = (int)ElapsedSeconds - accum;
+                    break;
+                }
+                accum = nextAccum;
+            }
+            CurrentIntervalIndex = activeIndex;
+            IntervalSeconds = intervalElapsed;
+        }
+        else
+        {
+            int totalIntervals = WorkoutIntensityProfile.Count;
+            if (totalIntervals > 0)
+            {
+                CurrentIntervalIndex = (int)(ElapsedSeconds / 60) % totalIntervals;
+                IntervalSeconds = (int)(ElapsedSeconds % 60);
+                TargetPower = WorkoutIntensityProfile[CurrentIntervalIndex];
+            }
+        }
+    }
+
+    public async Task<List<WorkoutTemplateDto>> LoadWorkoutTemplatesAsync()
+    {
+        try
+        {
+            using var stream = await Microsoft.Maui.Storage.FileSystem.OpenAppPackageFileAsync("wwwroot/workouts.json");
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+            var options = new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
+            return System.Text.Json.JsonSerializer.Deserialize<List<WorkoutTemplateDto>>(json, options) ?? new();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error loading workout templates: {ex.Message}");
+            return new();
+        }
+    }
+
+    public async Task<List<string>> GetAvailableTemplateGroupsAsync()
+    {
+        var templates = await LoadWorkoutTemplatesAsync();
+        return templates
+            .Select(t => t.Path.Split(new[] { '\\', '/' })[0])
+            .Distinct()
+            .OrderBy(g => g)
+            .ToList();
+    }
+
+    public async Task LoadActiveTrainingPlanAsync()
+    {
+        using var context = await _dbFactory.CreateDbContextAsync();
+        ActiveTrainingPlan = await context.TrainingPlans
+            .Include(p => p.Workouts)
+            .FirstOrDefaultAsync(p => p.IsActive);
+
+        if (ActiveTrainingPlan != null)
+        {
+            var workouts = ActiveTrainingPlan.Workouts.OrderBy(w => w.SequenceOrder).ToList();
+            if (ActiveTrainingPlan.CurrentWorkoutIndex < workouts.Count)
+            {
+                ActivePlanWorkout = workouts[ActiveTrainingPlan.CurrentWorkoutIndex];
+
+                var mappedWorkout = new Workout
+                {
+                    Id = -ActivePlanWorkout.Id,
+                    Name = ActivePlanWorkout.Name,
+                    Type = "Plan",
+                    DurationMinutes = ActivePlanWorkout.DurationMinutes,
+                    IntensityProfileJson = ActivePlanWorkout.IntensityProfileJson,
+                    IsFtpPercentage = true
+                };
+
+                SelectWorkout(mappedWorkout);
+            }
+            else
+            {
+                ActivePlanWorkout = null;
+            }
+        }
+        else
+        {
+            ActivePlanWorkout = null;
+        }
+        NotifyStateChanged();
+    }
+
+    public async Task CancelActiveTrainingPlanAsync()
+    {
+        using var context = await _dbFactory.CreateDbContextAsync();
+        var activePlans = await context.TrainingPlans.Where(p => p.IsActive).ToListAsync();
+        foreach (var p in activePlans)
+        {
+            p.IsActive = false;
+        }
+        await context.SaveChangesAsync();
+        await LoadActiveTrainingPlanAsync();
+    }
+
+    public async Task UpdateWorkoutDurationAsync(int workoutId, int newDurationMinutes)
+    {
+        if (newDurationMinutes <= 0) return;
+
+        using var context = await _dbFactory.CreateDbContextAsync();
+        if (workoutId < 0)
+        {
+            // Plan Workout
+            var planWorkoutId = -workoutId;
+            var planWorkout = await context.TrainingPlanWorkouts.FirstOrDefaultAsync(w => w.Id == planWorkoutId);
+            if (planWorkout != null && planWorkout.DurationMinutes != newDurationMinutes)
+            {
+                var cleanJson = planWorkout.IntensityProfileJson.Trim('[', ']');
+                if (!string.IsNullOrWhiteSpace(cleanJson))
+                {
+                    var oldProfile = cleanJson.Split(',').Select(s => int.Parse(s.Trim())).ToList();
+                    if (oldProfile.Count > 0)
+                    {
+                        int newSize = newDurationMinutes * 60; // plan workouts always represent 1 second per element
+                        int oldSize = oldProfile.Count;
+
+                        var newProfile = new List<int>();
+                        for (int i = 0; i < newSize; i++)
+                        {
+                            double ratio = (double)i / newSize;
+                            int oldIdx = (int)Math.Min(oldSize - 1, (int)Math.Floor(ratio * oldSize));
+                            newProfile.Add(oldProfile[oldIdx]);
+                        }
+                        planWorkout.IntensityProfileJson = "[" + string.Join(",", newProfile) + "]";
+                    }
+                }
+
+                planWorkout.DurationMinutes = newDurationMinutes;
+                await context.SaveChangesAsync();
+
+                // Reload the active training plan to update cache and active workout
+                await LoadActiveTrainingPlanAsync();
+            }
+        }
+        else
+        {
+            // Static Workout
+            var workout = await context.Workouts.FirstOrDefaultAsync(w => w.Id == workoutId);
+            if (workout != null && workout.DurationMinutes != newDurationMinutes)
+            {
+                var cleanJson = workout.IntensityProfileJson.Trim('[', ']');
+                if (!string.IsNullOrWhiteSpace(cleanJson))
+                {
+                    var oldProfile = cleanJson.Split(',').Select(s => int.Parse(s.Trim())).ToList();
+                    if (oldProfile.Count > 0)
+                    {
+                        int newSize = workout.IsFtpPercentage ? newDurationMinutes * 60 : newDurationMinutes;
+                        int oldSize = oldProfile.Count;
+
+                        var newProfile = new List<int>();
+                        for (int i = 0; i < newSize; i++)
+                        {
+                            double ratio = (double)i / newSize;
+                            int oldIdx = (int)Math.Min(oldSize - 1, (int)Math.Floor(ratio * oldSize));
+                            newProfile.Add(oldProfile[oldIdx]);
+                        }
+                        workout.IntensityProfileJson = "[" + string.Join(",", newProfile) + "]";
+                    }
+                }
+
+                workout.DurationMinutes = newDurationMinutes;
+                await context.SaveChangesAsync();
+
+                // Refresh cache in service
+                AvailableWorkouts = await context.Workouts.ToListAsync();
+                if (ActiveWorkout != null && ActiveWorkout.Id == workoutId)
+                {
+                    var updatedWorkout = AvailableWorkouts.First(w => w.Id == workoutId);
+                    SelectWorkout(updatedWorkout);
+                }
+                NotifyStateChanged();
+            }
+        }
+    }
+
+    public async Task CompleteWorkoutManuallyAsync(Workout workout)
+    {
+        using var context = await _dbFactory.CreateDbContextAsync();
+        var session = new CompletedSession
+        {
+            WorkoutName = workout.Name,
+            Date = DateTime.Now,
+            AveragePower = Math.Round(Profile.Ftp * 0.75),
+            MaxPower = Profile.Ftp * 1.1,
+            AverageHeartRate = 135,
+            DurationSeconds = workout.DurationMinutes * 60
+        };
+        context.CompletedSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        if (workout.Id < 0)
+        {
+            // Plan Workout: advance active training plan
+            await AdvanceActiveTrainingPlanAsync();
+        }
+        else
+        {
+            NotifyStateChanged();
+        }
+    }
+
+    public async Task StartNewTrainingPlanAsync(string groupName, List<WorkoutTemplateDto> templates)
+    {
+        using var context = await _dbFactory.CreateDbContextAsync();
+
+        // Deactivate existing plans
+        var activePlans = await context.TrainingPlans.Where(p => p.IsActive).ToListAsync();
+        foreach (var p in activePlans)
+        {
+            p.IsActive = false;
+        }
+
+        var newPlan = new TrainingPlan
+        {
+            Name = groupName,
+            GroupName = groupName,
+            CurrentWorkoutIndex = 0,
+            IsActive = true
+        };
+
+        context.TrainingPlans.Add(newPlan);
+        await context.SaveChangesAsync();
+
+        int order = 0;
+        foreach (var t in templates)
+        {
+            var intensityJson = ConvertSegmentsToIntensityProfileJson(t.Segments);
+            var durationSecs = CalculateDurationSeconds(t.Segments);
+
+            var planWorkout = new TrainingPlanWorkout
+            {
+                TrainingPlanId = newPlan.Id,
+                Name = t.Name,
+                Description = t.Description ?? "",
+                DurationMinutes = (int)Math.Ceiling(durationSecs / 60.0),
+                IntensityProfileJson = intensityJson,
+                IsCompleted = false,
+                SequenceOrder = order++,
+                Path = t.Path
+            };
+            context.TrainingPlanWorkouts.Add(planWorkout);
+        }
+
+        await context.SaveChangesAsync();
+        await LoadActiveTrainingPlanAsync();
+    }
+
+    public async void CompleteActiveWorkout()
+    {
+        PauseWorkout();
+
+        using (var context = await _dbFactory.CreateDbContextAsync())
+        {
+            var session = new CompletedSession
+            {
+                WorkoutName = ActiveWorkout?.Name ?? "Entraînement",
+                Date = DateTime.Now,
+                AveragePower = PowerHistory.Any() ? Math.Round(PowerHistory.Average()) : 0,
+                MaxPower = PowerHistory.Any() ? PowerHistory.Max() : 0,
+                AverageHeartRate = HeartRateHistory.Any() ? Math.Round(HeartRateHistory.Average()) : 0,
+                DurationSeconds = ElapsedSeconds
+            };
+            context.CompletedSessions.Add(session);
+            await context.SaveChangesAsync();
+        }
+
+        await AdvanceActiveTrainingPlanAsync();
+        NotifyStateChanged();
+    }
+
+    public async Task AdvanceActiveTrainingPlanAsync()
+    {
+        if (ActiveTrainingPlan == null || ActivePlanWorkout == null) return;
+
+        using var context = await _dbFactory.CreateDbContextAsync();
+        var plan = await context.TrainingPlans
+            .Include(p => p.Workouts)
+            .FirstOrDefaultAsync(p => p.Id == ActiveTrainingPlan.Id);
+
+        if (plan != null)
+        {
+            var workouts = plan.Workouts.OrderBy(w => w.SequenceOrder).ToList();
+            var currentWk = workouts.FirstOrDefault(w => w.Id == ActivePlanWorkout.Id);
+            if (currentWk != null)
+            {
+                currentWk.IsCompleted = true;
+            }
+
+            plan.CurrentWorkoutIndex++;
+            if (plan.CurrentWorkoutIndex >= workouts.Count)
+            {
+                plan.IsActive = false; // completed plan
+            }
+
+            await context.SaveChangesAsync();
+        }
+
+        await LoadActiveTrainingPlanAsync();
+    }
+
+    private static double CalculateDurationSeconds(List<WorkoutSegmentDto> segments)
+    {
+        double totalSeconds = 0;
+        foreach (var s in segments)
+        {
+            if (s.T == "i")
+            {
+                totalSeconds += (s.R ?? 1) * ((s.D1 ?? 0) + (s.D2 ?? 0));
+            }
+            else
+            {
+                totalSeconds += s.D1 ?? 0;
+            }
+        }
+        return totalSeconds;
+    }
+
+    private static string ConvertSegmentsToIntensityProfileJson(List<WorkoutSegmentDto> segments)
+    {
+        var profile = new List<int>();
+        foreach (var s in segments)
+        {
+            if (s.T == "s")
+            {
+                int p1 = (int)(s.P1 ?? 50);
+                int d1 = s.D1 ?? 0;
+                for (int i = 0; i < d1; i++) profile.Add(p1);
+            }
+            else if (s.T == "r")
+            {
+                double p1 = s.P1 ?? 50;
+                double p2 = s.P2 ?? 50;
+                int d1 = s.D1 ?? 0;
+                for (int i = 0; i < d1; i++)
+                {
+                    double t = d1 > 1 ? (double)i / (d1 - 1) : 0;
+                    int p = (int)Math.Round(p1 + (p2 - p1) * t);
+                    profile.Add(p);
+                }
+            }
+            else if (s.T == "i")
+            {
+                int p1 = (int)(s.P1 ?? 50);
+                int d1 = s.D1 ?? 0;
+                int p2 = (int)(s.P2 ?? 50);
+                int d2 = s.D2 ?? 0;
+                int r = s.R ?? 1;
+                for (int loop = 0; loop < r; loop++)
+                {
+                    for (int i = 0; i < d1; i++) profile.Add(p1);
+                    for (int i = 0; i < d2; i++) profile.Add(p2);
+                }
+            }
+            else if (s.T == "f")
+            {
+                int d1 = s.D1 ?? 0;
+                for (int i = 0; i < d1; i++) profile.Add(50);
+            }
+        }
+
+        return "[" + string.Join(",", profile) + "]";
+    }
 
     public void Dispose()
     {
@@ -1455,4 +2215,30 @@ public class DiscoveredDevice
     public string Address { get; set; } = null!;
     public string DeviceType { get; set; } = null!; // Controllable, HRM, Moxy, CoreTemp
     public int Rssi { get; set; }
+    public uint BluetoothAddressType { get; set; } = 0; // 0 = Public, 1 = Random
+}
+
+public class WorkoutInterval
+{
+    public int TargetPower { get; set; }
+    public int DurationSeconds { get; set; }
+}
+
+public class WorkoutTemplateDto
+{
+    public string Path { get; set; } = null!;
+    public string Name { get; set; } = null!;
+    public string Description { get; set; } = null!;
+    public string Author { get; set; } = null!;
+    public List<WorkoutSegmentDto> Segments { get; set; } = new();
+}
+
+public class WorkoutSegmentDto
+{
+    public string T { get; set; } = null!; // "s" (steady), "r" (ramp), "i" (interval), "f" (free ride)
+    public double? P1 { get; set; }        // target power 1 (percentage of FTP)
+    public double? P2 { get; set; }        // target power 2 (percentage of FTP)
+    public int? D1 { get; set; }           // duration 1 (seconds)
+    public int? D2 { get; set; }           // duration 2 (seconds)
+    public int? R { get; set; }            // repetitions
 }

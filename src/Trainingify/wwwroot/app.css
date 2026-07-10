@@ -144,6 +144,10 @@ html, body {
     grid-template-columns: repeat(4, 1fr);
 }
 
+.grid-6-col {
+    grid-template-columns: repeat(6, 1fr);
+}
+
 .metric-box {
     background-color: var(--card-color);
     border: 1px solid var(--border-color);
@@ -362,6 +366,19 @@ html, body {
     height: 280px;
     padding: 10px 0;
     border-bottom: 2px solid var(--border-color);
+    position: relative;
+}
+
+.profile-progress-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: #ffffff;
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+    pointer-events: none;
+    z-index: 10;
+    transition: left 1s linear;
 }
 
 .profile-bar {

@@ -156,9 +156,16 @@
                     @if (StateService.FanMode == "Manual")
                     {
                         <div class="d-flex justify-content-between align-items-center bg-black p-2 border border-secondary" style="border-radius: 8px; border-color: #333 !important;">
-                            <button class="btn btn-sm btn-outline-light px-3 py-1" style="font-size: 16px; font-weight: bold; border-color: #444;" @onclick="DecrementFanSpeed" disabled="@(StateService.FanSpeed <= 1)">-</button>
-                            <div class="text-center">
-                                <span class="fw-bold text-warning" style="font-size: 18px;">Vitesse @StateService.FanSpeed</span>
+                            <button class="btn btn-sm btn-outline-light px-3 py-1" style="font-size: 16px; font-weight: bold; border-color: #444;" @onclick="DecrementFanSpeed" disabled="@(StateService.FanSpeed <= 0)">-</button>
+                            <div class="text-center" style="min-width: 100px;">
+                                @if (StateService.FanSpeed == 0)
+                                {
+                                    <span class="fw-bold text-danger" style="font-size: 18px;">Arrêté</span>
+                                }
+                                else
+                                {
+                                    <span class="fw-bold text-warning" style="font-size: 18px;">Vitesse @StateService.FanSpeed</span>
+                                }
                             </div>
                             <button class="btn btn-sm btn-outline-light px-3 py-1" style="font-size: 16px; font-weight: bold; border-color: #444;" @onclick="IncrementFanSpeed" disabled="@(StateService.FanSpeed >= 5)">+</button>
                         </div>
@@ -243,7 +250,7 @@
             var normalizedVal = (history[i] - minVal) / range;
             normalizedVal = Math.Clamp(normalizedVal, 0.0, 1.0);
             var y = height - (normalizedVal * (height - 20.0)) - 10.0; // padding inside SVG
-            points.Add($"{x:F1},{y:F1}");
+            points.Add($"{x.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)},{y.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}");
         }
 
         return "M " + string.Join(" L ", points);
@@ -281,7 +288,7 @@
 
     private void DecrementFanSpeed()
     {
-        if (StateService.FanSpeed > 1)
+        if (StateService.FanSpeed > 0)
         {
             StateService.FanSpeed--;
         }

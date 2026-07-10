@@ -14,36 +14,99 @@
     </div>
 </div>
 
-<div class="workout-selector-container mb-3 bg-black p-3 border border-secondary" style="border-radius: 16px; border-color: #333 !important;">
-    <label class="form-label text-muted fw-bold mb-2" style="font-size: 11px; letter-spacing: 1px;">CHOISIR UN ENTRAÎNEMENT</label>
-    <select class="form-select bg-black text-light border-secondary py-2 px-3 fw-bold" style="border-radius: 12px; border-color: #444 !important; font-size: 14px;"
-            value="@StateService.ActiveWorkout?.Id" @onchange="OnWorkoutChanged">
-        @foreach (var workout in StateService.AvailableWorkouts)
-        {
-            <option value="@workout.Id">@workout.Name (@workout.DurationMinutes min | @workout.Type)</option>
-        }
-    </select>
-</div>
 
 @if (StateService.ActiveWorkout != null)
 {
+    <!-- Real-time Workout Metrics Card -->
+    <div class="profile-chart-card mt-3">
+        <div class="metrics-grid grid-6-col" style="margin-bottom: 0;">
+            <div class="metric-box">
+                <span class="metric-label">Puissance</span>
+                <span class="metric-value val-yellow">@(StateService.Power > 0 ? $"{StateService.Power}" : "--")</span>
+                <span class="metric-label">Watts</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Nombre de tour</span>
+                <span class="metric-value val-green">@(StateService.Cadence > 0 ? $"{StateService.Cadence}" : "--")</span>
+                <span class="metric-label">Rpm</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Cardio</span>
+                <span class="metric-value val-red">@(StateService.HeartRate > 0 ? $"{StateService.HeartRate}" : "--")</span>
+                <span class="metric-label">Bpm</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Vitesse</span>
+                <span class="metric-value val-cyan">@(StateService.Speed > 0 ? $"{StateService.Speed:F1}" : "--")</span>
+                <span class="metric-label">Km/h</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Pente</span>
+                <span class="metric-value">@(StateService.TargetMode == "SLOPE" ? $"{StateService.TargetPower:F1}" : "0.0")</span>
+                <span class="metric-label">%</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Calories</span>
+                <span class="metric-value val-orange">@(StateService.Calories > 0 ? $"{StateService.Calories:F0}" : "0")</span>
+                <span class="metric-label">Kcal</span>
+            </div>
+        </div>
+    </div>
+
     <div class="profile-chart-card mt-3">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
                 <h4 class="fw-bold mb-0 text-warning" style="font-size: 20px;">@StateService.ActiveWorkout.Name</h4>
                 <span class="text-muted" style="font-size: 12px;">Type: <span class="workout-badge @GetBadgeClass(StateService.ActiveWorkout.Type)">@StateService.ActiveWorkout.Type</span></span>
             </div>
-            <span class="fw-bold text-light" style="font-size: 16px;">Durée : @StateService.ActiveWorkout.DurationMinutes min</span>
+            <div class="d-flex align-items-center gap-2">
+                <!-- Duration modifier text box with up/down buttons -->
+                <div class="d-flex align-items-center bg-black border border-secondary" style="border-radius: 8px; height: 32px; border-color: #444 !important;">
+                    <button class="btn btn-sm btn-link text-light p-0 px-2 fw-bold" style="text-decoration: none; font-size: 14px;" @onclick="() => ChangeDuration(StateService.ActiveWorkout, -5)">-</button>
+                    <input type="number" class="bg-black text-light text-center border-0 fw-bold" 
+                           style="width: 45px; font-size: 12px; outline: none; -moz-appearance: textfield;" 
+                           value="@StateService.ActiveWorkout.DurationMinutes" 
+                           @onchange="(e) => OnDurationInputChanged(e, StateService.ActiveWorkout)" />
+                    <span class="text-muted pe-2" style="font-size: 10px; font-weight: bold;">min</span>
+                    <button class="btn btn-sm btn-link text-light p-0 px-2 fw-bold" style="text-decoration: none; font-size: 14px;" @onclick="() => ChangeDuration(StateService.ActiveWorkout, 5)">+</button>
+                </div>
+
+                <!-- Complete session manually button -->
+                <button class="btn btn-sm btn-success fw-bold px-2.5" style="border-radius: 8px; font-size: 11px; height: 32px;" 
+                        @onclick="() => CompleteWorkout(StateService.ActiveWorkout)">
+                    Terminé
+                </button>
+            </div>
         </div>
         
         <!-- Bar Chart Representation -->
         <div class="profile-bar-chart">
-            @foreach (var target in StateService.WorkoutIntensityProfile)
+            @for (int i = 0; i < StateService.DisplayIntervals.Count; i++)
             {
-                <div class="profile-bar" 
-                     style="height: @(GetBarHeight(target))%; background-color: @(GetBarColor(target));"
-                     title="Target: @(target)W">
+                var interval = StateService.DisplayIntervals[i];
+                var target = interval.TargetPower;
+                var duration = interval.DurationSeconds;
+                var targetCadence = GetTargetCadence(target);
+                var isCurrent = StateService.IsWorkoutActive && StateService.CurrentIntervalIndex == i;
+                
+                <div style="display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; flex: @duration; align-self: stretch; min-width: 2px;">
+                    <!-- Expected Work Label above the block -->
+                    <div style="font-size: 10px; font-weight: bold; text-align: center; margin-bottom: 6px; line-height: 1.2; color: @(isCurrent ? "var(--accent-yellow)" : "#aaa"); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">
+                        <div>@(target)W</div>
+                        <div style="color: @(isCurrent ? "var(--accent-green)" : "#777"); font-size: 9px; font-weight: normal;">@(targetCadence) RPM</div>
+                    </div>
+                    
+                    <!-- The bar itself -->
+                    <div class="profile-bar" 
+                          style="height: @(GetBarHeight(target).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))%; flex: none; background-color: @(GetBarColor(target)); width: 100%; border: @(isCurrent ? "2px solid #ffffff" : "none"); box-shadow: @(isCurrent ? "0 0 8px rgba(255,255,255,0.4)" : "none");"
+                          title="Target: @(target)W | Durée: @FormatIntervalDuration(duration) | Cadence: @(targetCadence) RPM">
+                    </div>
                 </div>
+            }
+            @if (StateService.ActiveWorkout != null && StateService.TotalDurationSeconds > 0)
+            {
+                var progressPercent = Math.Clamp((StateService.ElapsedSeconds / StateService.TotalDurationSeconds) * 100.0, 0.0, 100.0);
+                <div class="profile-progress-line" style="left: @(progressPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))%;"></div>
             }
         </div>
         
@@ -74,16 +137,24 @@
         StateService.SelectWorkout(workout);
     }
 
-    private void OnWorkoutChanged(ChangeEventArgs e)
+    private async Task ChangeDuration(Workout workout, int delta)
     {
-        if (e.Value is string val && int.TryParse(val, out var id))
+        int newDuration = Math.Max(5, workout.DurationMinutes + delta);
+        await StateService.UpdateWorkoutDurationAsync(workout.Id, newDuration);
+    }
+
+    private async Task OnDurationInputChanged(ChangeEventArgs e, Workout workout)
+    {
+        if (e.Value is string val && int.TryParse(val, out var parsedVal))
         {
-            var workout = StateService.AvailableWorkouts.FirstOrDefault(w => w.Id == id);
-            if (workout != null)
-            {
-                SelectWorkout(workout);
-            }
+            int newDuration = Math.Max(5, parsedVal);
+            await StateService.UpdateWorkoutDurationAsync(workout.Id, newDuration);
         }
+    }
+
+    private async Task CompleteWorkout(Workout workout)
+    {
+        await StateService.CompleteWorkoutManuallyAsync(workout);
     }
 
     private string GetBadgeClass(string type)
@@ -100,8 +171,30 @@
 
     private double GetBarHeight(int targetPower)
     {
-        // scale to 0-350 Watts
-        return Math.Clamp((targetPower / 350.0) * 100.0, 10.0, 100.0);
+        if (StateService.WorkoutIntensityProfile == null || !StateService.WorkoutIntensityProfile.Any())
+        {
+            return 10.0;
+        }
+
+        var maxPower = StateService.WorkoutIntensityProfile.Max();
+        if (maxPower <= 0) maxPower = 350;
+
+        // Proportional to the maximum power in this workout, scaled to max 75% height
+        return Math.Clamp(((double)targetPower / maxPower) * 75.0, 0.0, 75.0);
+    }
+
+    private int GetTargetCadence(int targetPower)
+    {
+        var ftp = StateService.Profile.Ftp;
+        if (ftp <= 0) ftp = 250;
+
+        var ratio = (double)targetPower / ftp;
+
+        if (ratio < 0.55) return 85;     // Active Recovery
+        if (ratio < 0.75) return 90;     // Endurance
+        if (ratio < 0.90) return 90;     // Tempo
+        if (ratio < 1.05) return 95;     // Threshold
+        return 100;                      // VO2Max
     }
 
     private string GetBarColor(int targetPower)
@@ -116,6 +209,17 @@
         if (ratio < 0.90) return "var(--accent-yellow)";   // Zone 3 Tempo
         if (ratio < 1.05) return "var(--accent-orange)";   // Zone 4 Threshold
         return "var(--accent-red)";                        // Zone 5 VO2Max
+    }
+
+    private string FormatIntervalDuration(int seconds)
+    {
+        var m = seconds / 60;
+        var s = seconds % 60;
+        if (m > 0)
+        {
+            return s > 0 ? $"{m}m {s}s" : $"{m}m";
+        }
+        return $"{s}s";
     }
 
     public void Dispose()

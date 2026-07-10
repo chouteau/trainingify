@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Some of Zwift's built-in workouts to get you started.  Clone, edit, and download." />
+    <title>zwofactory.com - Templates</title>
+    <link rel="stylesheet" href="/site.css" /><link rel="apple-touch-icon-precomposed" sizes="57x57" href="/img/apple-touch-icon-57x57.png" />
+    <link rel="apple-touch-icon-precomposed" sizes="114x114" href="/img/apple-touch-icon-114x114.png" />
+    <link rel="apple-touch-icon-precomposed" sizes="72x72" href="/img/apple-touch-icon-72x72.png" />
+    <link rel="apple-touch-icon-precomposed" sizes="144x144" href="/img/apple-touch-icon-144x144.png" />
+    <link rel="apple-touch-icon-precomposed" sizes="60x60" href="/img/apple-touch-icon-60x60.png" />
+    <link rel="apple-touch-icon-precomposed" sizes="120x120" href="/img/apple-touch-icon-120x120.png" />
+    <link rel="apple-touch-icon-precomposed" sizes="76x76" href="/img/apple-touch-icon-76x76.png" />
+    <link rel="apple-touch-icon-precomposed" sizes="152x152" href="/img/apple-touch-icon-152x152.png" />
+    <link rel="icon" type="image/png" href="/img/favicon-196x196.png" sizes="196x196" />
+    <link rel="icon" type="image/png" href="/img/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/png" href="/img/favicon-32x32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="/img/favicon-16x16.png" sizes="16x16" />
+    <link rel="icon" type="image/png" href="/img/favicon-128.png" sizes="128x128" />
+    <link rel="icon" href="/img/favicon.ico?v=1" />
+    <meta name="application-name" content="zwofactory"/>
+    <meta name="msapplication-TileColor" content="#FFFFFF" />
+    <meta name="msapplication-TileImage" content="/img/mstile-144x144.png" />
+    <meta name="msapplication-square70x70logo" content="/img/mstile-70x70.png" />
+    <meta name="msapplication-square150x150logo" content="/img/mstile-150x150.png" />
+    <meta name="msapplication-wide310x150logo" content="/img/mstile-310x150.png" />
+    <meta name="msapplication-square310x310logo" content="/img/mstile-310x310.png" />
+    <style>.folder { padding: 1em; margin: 0.5em; border: 1px solid #555; border-radius: 10px; }</style>
+</head> 
+<body>
+<header>
+<h1><a href="/">
+<img src="/img/logo.svg" alt="zwofactory.com" width="500px" />
+</a></h1>
+</header>
+
+<main>
+Workout Templates<hr />
+<div class="grid">
+    <div class="u-1-10 u-sm-1">Group:</div>
+    <div class="u-9-10 u-sm-1"><select id="selWorkoutGroups"><option></option></select></div>
+</div>
+<div id="divToCloneFolder" class="invisible folder">
+    <a data-toggle></a><div class="invisible striped"></div>
+</div>
+<div id="divToCloneWorkout" class="invisible">
+    <div class="grid">
+        <div class="u-1-4 u-sm-1"><div data-name></div><div data-duration></div><div data-author></div><div data-tags></div></div>
+        <div class="u-3-8 u-sm-1"><div data-workout></div></div>
+        <div class="u-3-8 u-sm-1"><div data-description></div></div>
+        <div class="u-1-4 u-sm-1-2"><button data-clone>Clone</button></div>
+        <div class="u-1-4 u-sm-1-2"><button data-download>Download</button></div>
+    </div>
+</div>
+
+<div id="divWorkoutTemplates" class="striped">
+
+</div>
+</main>
+
+<footer>
+    <div class="grid">
+        <div class="u-1-5 u-sm-1"><a href="/">zwofactory.com</a></div>
+        <div class="u-1-5 u-sm-1"><a href="/myworkouts/">My Workouts</a></div>
+        <div class="u-1-5 u-sm-1"><a href="/info/">Info</a></div>
+        <div class="u-1-5 u-sm-1"><a href="/settings/">Settings</a></div>
+        <div class="u-1-5 u-sm-1"><a href="/templates/">Workout Templates</a></div>
+    </div>
+    <hr />
+    <div>&copy; 2023 Matt McNeil<a href="mailto:zwofactory@gmail.com">Contact: zwofactory@gmail.com</a></div>
+</footer>
+<script src="/js/settings.js"></script>
+<script src="/js/fileSaver.js"></script>
+<script src="/js/zwofactory.js"></script>
+<script src="/js/templates.html.js"></script>
+</body>
+</html>
