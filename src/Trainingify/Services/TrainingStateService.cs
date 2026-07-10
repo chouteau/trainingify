@@ -20,6 +20,10 @@ namespace Trainingify.Services;
 public class TrainingStateService : IDisposable
 {
     private readonly IDbContextFactory<TrainingifyDbContext> _dbFactory;
+    private static readonly object FanLogLock = new();
+    public static string FanLogPath { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Trainingify", "logs", "fan-bluetooth.log");
     private System.Threading.Timer? _simulationTimer;
     private readonly Random _random = new();
 
@@ -34,6 +38,10 @@ public class TrainingStateService : IDisposable
     private BluetoothLEDevice? _fanDevice;
     private GattCharacteristic? _fanCharacteristic;
     private readonly SemaphoreSlim _fanWriteSemaphore = new SemaphoreSlim(1, 1);
+    private TaskCompletionSource<byte[]>? _pendingFanAcknowledgement;
+    private byte _pendingFanCommand;
+    private byte _pendingFanValue;
+    private readonly SemaphoreSlim _trainerWriteSemaphore = new SemaphoreSlim(1, 1);
     private ushort? _lastCrankRevs;
     private ushort? _lastCrankEventTime;
 
@@ -50,7 +58,7 @@ public class TrainingStateService : IDisposable
     private static readonly Guid HeartRateServiceUuid = Guid.Parse("0000180d-0000-1000-8000-00805f9b34fb");
     private static readonly Guid HeartRateMeasurementUuid = Guid.Parse("00002a37-0000-1000-8000-00805f9b34fb");
 
-    private static readonly Guid FanServiceUuid = Guid.Parse("a026e037-0a7d-4ab3-97fa-f1500f9feb8b");
+    private static readonly Guid FanServiceUuid = Guid.Parse("a026ee0c-0a7d-4ab3-97fa-f1500f9feb8b");
     private static readonly Guid FanControlUuid = Guid.Parse("a026e038-0a7d-4ab3-97fa-f1500f9feb8b");
 #endif
 
@@ -77,10 +85,22 @@ public class TrainingStateService : IDisposable
 
     // Running State
     public bool IsWorkoutActive { get; private set; }
+    public bool IsWorkoutAutoPaused { get; private set; }
     public double ElapsedSeconds { get; private set; }
     public double IntervalSeconds { get; private set; }
     public int CurrentIntervalIndex { get; private set; }
     public double Calories { get; private set; }
+    private int _zeroCadenceTicks;
+    private DateTime _lastTrainerMetricsAtUtc = DateTime.MinValue;
+    private const int AutoPauseDelaySeconds = 2;
+    private static readonly TimeSpan TrainerMetricsFreshness = TimeSpan.FromSeconds(3);
+    private const double FanMaximumTrainerSpeedKph = 40.0;
+    private const int FanMaximumAppLevel = 5;
+    private const double LevelPowerWatts = 140.0;
+    private const double ReferencePowerWatts = 300.0;
+    private const double ReferenceGradePercent = 12.0;
+    private const double MinimumSimulatedGradePercent = -15.0;
+    private const double MaximumSimulatedGradePercent = 20.0;
 
     // Target Power
     private string _targetMode = "ERG";
@@ -92,6 +112,7 @@ public class TrainingStateService : IDisposable
             if (_targetMode != value)
             {
                 _targetMode = value;
+                _isErgModeEnabled = value == "ERG";
                 NotifyStateChanged();
 #if WINDOWS
                 _ = UpdateTrainerTargetAsync();
@@ -114,6 +135,63 @@ public class TrainingStateService : IDisposable
                 _ = UpdateTrainerTargetAsync();
 #endif
             }
+        }
+    }
+
+    public double TargetGrade => CalculateGradeFromPower(_targetPower);
+
+    public static double CalculateGradeFromPower(double powerWatts)
+    {
+        var grade = (powerWatts - LevelPowerWatts) * ReferenceGradePercent /
+            (ReferencePowerWatts - LevelPowerWatts);
+        return Math.Clamp(grade, MinimumSimulatedGradePercent, MaximumSimulatedGradePercent);
+    }
+
+    private bool _isPowerSlopeEnabled;
+    public bool IsPowerSlopeEnabled
+    {
+        get => _isPowerSlopeEnabled;
+        set
+        {
+            if (_isPowerSlopeEnabled == value) return;
+
+            _isPowerSlopeEnabled = value;
+            if (value)
+            {
+                _isErgModeEnabled = false;
+                _targetMode = "POWER_SLOPE";
+            }
+            else if (_targetMode == "POWER_SLOPE")
+            {
+                _targetMode = "ERG";
+            }
+
+            NotifyStateChanged();
+#if WINDOWS
+            _ = value ? UpdateTrainerTargetAsync() : LevelTrainerAsync();
+#endif
+        }
+    }
+
+    private bool _isErgModeEnabled = true;
+    public bool IsErgModeEnabled
+    {
+        get => _isErgModeEnabled;
+        set
+        {
+            if (_isErgModeEnabled == value) return;
+
+            _isErgModeEnabled = value;
+            if (value)
+            {
+                _isPowerSlopeEnabled = false;
+                _targetMode = "ERG";
+            }
+
+            NotifyStateChanged();
+#if WINDOWS
+            _ = value ? UpdateTrainerTargetAsync() : DisableErgModeAsync();
+#endif
         }
     }
 
@@ -156,7 +234,7 @@ public class TrainingStateService : IDisposable
         }
     }
 
-    private int _fanSpeed = 1;
+    private int _fanSpeed;
     public int FanSpeed
     {
         get => _fanSpeed;
@@ -176,7 +254,7 @@ public class TrainingStateService : IDisposable
         }
     }
 
-    private string _fanMode = "Manual";
+    private string _fanMode = "TrainerSpeed";
     public string FanMode
     {
         get => _fanMode;
@@ -203,6 +281,14 @@ public class TrainingStateService : IDisposable
         get => _fanConnected;
         set
         {
+            if (value && !IsValidBluetoothAddress(SelectedFanId))
+            {
+                LogFan("Connection rejected: no real HEADWIND Bluetooth address is selected.");
+                _fanConnected = false;
+                NotifyStateChanged();
+                return;
+            }
+
             Console.WriteLine($"[Fan BLE] FanConnected setter called with value: {value} (current backing field: {_fanConnected}, SelectedFanId: '{SelectedFanId}')");
             if (_fanConnected != value)
             {
@@ -223,6 +309,14 @@ public class TrainingStateService : IDisposable
         get => _controllableConnected;
         set
         {
+            if (value && !IsValidBluetoothAddress(SelectedControllableId))
+            {
+                _controllableConnected = false;
+                ControllableConnectionStatus = "Sélectionnez un home trainer Bluetooth après la recherche";
+                NotifyStateChanged();
+                return;
+            }
+
             if (_controllableConnected != value)
             {
                 _controllableConnected = value;
@@ -324,7 +418,15 @@ public class TrainingStateService : IDisposable
             var savedDevices = await context.ConnectedDevices.ToListAsync();
             foreach (var device in savedDevices)
             {
-                if (string.IsNullOrEmpty(device.Address)) continue;
+                if (string.IsNullOrEmpty(device.Address) || !IsValidBluetoothAddress(device.Address))
+                {
+                    if (device.IsEnabled)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"Ignoring simulated saved device '{device.Name}' ({device.Address}).");
+                    }
+                    continue;
+                }
 
                 // Ensure the device is in the DiscoveredDevices list so the UI displays its name properly.
                 if (!DiscoveredDevices.Any(d => d.Address == device.Address && d.DeviceType == device.DeviceType))
@@ -393,6 +495,8 @@ public class TrainingStateService : IDisposable
         CurrentIntervalIndex = 0;
         Calories = 0;
         IsWorkoutActive = false;
+        IsWorkoutAutoPaused = false;
+        _zeroCadenceTicks = 0;
 
         // Parse intensity profile from JSON
         try
@@ -446,6 +550,10 @@ public class TrainingStateService : IDisposable
             DisplayIntervals.Add(new WorkoutInterval { TargetPower = currentPower, DurationSeconds = currentDuration });
         }
 
+        if (_isErgModeEnabled)
+        {
+            _targetMode = "ERG";
+        }
         UpdateActiveStepState();
         NotifyStateChanged();
     }
@@ -454,16 +562,27 @@ public class TrainingStateService : IDisposable
     {
         if (IsWorkoutActive) return;
 
+        if (_isErgModeEnabled)
+        {
+            _targetMode = "ERG";
+        }
+        IsWorkoutAutoPaused = false;
+        _zeroCadenceTicks = 0;
         IsWorkoutActive = true;
-        _simulationTimer = new System.Threading.Timer(Tick, null, 0, 1000);
+        _simulationTimer ??= new System.Threading.Timer(Tick, null, 0, 1000);
+#if WINDOWS
+        _ = UpdateTrainerTargetAsync();
+#endif
         NotifyStateChanged();
     }
 
     public void PauseWorkout()
     {
-        if (!IsWorkoutActive) return;
+        if (!IsWorkoutActive && _simulationTimer == null) return;
 
         IsWorkoutActive = false;
+        IsWorkoutAutoPaused = false;
+        _zeroCadenceTicks = 0;
         _simulationTimer?.Dispose();
         _simulationTimer = null;
         NotifyStateChanged();
@@ -505,6 +624,10 @@ public class TrainingStateService : IDisposable
             }
         }
 
+        if (_isErgModeEnabled)
+        {
+            _targetMode = "ERG";
+        }
         UpdateActiveStepState();
         NotifyStateChanged();
     }
@@ -513,11 +636,53 @@ public class TrainingStateService : IDisposable
     {
         if (ActiveWorkout == null) return;
 
-        ElapsedSeconds++;
-        Calories += (Power * 1.0) / 1000.0;
-
-        // Simulating data updates
+        // Update simulated values first; real trainer values arrive through BLE notifications.
         SimulateMetrics();
+
+        var hasRealTrainerMetrics = false;
+#if WINDOWS
+        hasRealTrainerMetrics = _ftmsCharacteristic != null;
+#endif
+        var metricsAreFresh = !hasRealTrainerMetrics ||
+            DateTime.UtcNow - _lastTrainerMetricsAtUtc <= TrainerMetricsFreshness;
+        var isPedaling = Cadence > 0 && metricsAreFresh;
+
+        if (IsWorkoutAutoPaused)
+        {
+            if (!isPedaling)
+            {
+                NotifyStateChanged();
+                return;
+            }
+
+            IsWorkoutAutoPaused = false;
+            IsWorkoutActive = true;
+            _zeroCadenceTicks = 0;
+#if WINDOWS
+            if (_isErgModeEnabled)
+            {
+                _ = UpdateTrainerTargetAsync();
+            }
+#endif
+        }
+        else if (IsWorkoutActive)
+        {
+            _zeroCadenceTicks = isPedaling ? 0 : _zeroCadenceTicks + 1;
+            if (_zeroCadenceTicks >= AutoPauseDelaySeconds)
+            {
+                IsWorkoutActive = false;
+                IsWorkoutAutoPaused = true;
+                NotifyStateChanged();
+                return;
+            }
+        }
+        else
+        {
+            return;
+        }
+
+        ElapsedSeconds++;
+        Calories += Power / 1000.0;
 
         // Check if workout has finished
         if (ElapsedSeconds >= TotalDurationSeconds)
@@ -616,15 +781,7 @@ public class TrainingStateService : IDisposable
         {
             if (FanMode == "TrainerSpeed")
             {
-                // Speed ranges from 0 to 50+ km/h. Map to 1-5.
-                FanSpeed = Speed switch
-                {
-                    < 10 => 1,
-                    < 20 => 2,
-                    < 30 => 3,
-                    < 40 => 4,
-                    _ => 5
-                };
+                UpdateFanSpeedFromTrainerMetrics();
             }
             else if (FanMode == "HeartRate")
             {
@@ -664,23 +821,10 @@ public class TrainingStateService : IDisposable
     }
 
     // Scanning & Device management
-    public List<DiscoveredDevice> DiscoveredDevices { get; private set; } = new()
-    {
-        // Pre-populate with some default discovered devices
-        new DiscoveredDevice { Name = "Tacx Neo T2900", Protocol = "Bluetooth", Address = "Tacx-T2900-BLE-7548", DeviceType = "Controllable", Rssi = -62 },
-        new DiscoveredDevice { Name = "Tacx Trainer (ANT+)", Protocol = "ANT+", Address = "Tacx-T2900-ANT-48591", DeviceType = "Controllable", Rssi = 85 },
-        new DiscoveredDevice { Name = "Polar H10", Protocol = "Bluetooth", Address = "Polar-H10-BLE-3948", DeviceType = "HRM", Rssi = -55 },
-        new DiscoveredDevice { Name = "Polar H10 (ANT+)", Protocol = "ANT+", Address = "Polar-H10-ANT-62841", DeviceType = "HRM", Rssi = 90 },
-        new DiscoveredDevice { Name = "Moxy Muscle O2", Protocol = "Bluetooth", Address = "Moxy-BLE-1948", DeviceType = "Moxy", Rssi = -68 },
-        new DiscoveredDevice { Name = "Moxy Muscle (ANT+)", Protocol = "ANT+", Address = "Moxy-ANT-49281", DeviceType = "Moxy", Rssi = 75 },
-        new DiscoveredDevice { Name = "Core Temp Sensor", Protocol = "Bluetooth", Address = "Core-BLE-2849", DeviceType = "CoreTemp", Rssi = -60 },
-        new DiscoveredDevice { Name = "Core Temp (ANT+)", Protocol = "ANT+", Address = "Core-ANT-74928", DeviceType = "CoreTemp", Rssi = 80 },
-        new DiscoveredDevice { Name = "Wahoo Headwind", Protocol = "Bluetooth", Address = "Wahoo-Headwind-BLE-1849", DeviceType = "Fan", Rssi = -58 },
-        new DiscoveredDevice { Name = "Wahoo Headwind (ANT+)", Protocol = "ANT+", Address = "Wahoo-Headwind-ANT-3948", DeviceType = "Fan", Rssi = 82 }
-    };
+    public List<DiscoveredDevice> DiscoveredDevices { get; private set; } = new();
     public bool IsScanning { get; private set; }
 
-    private string _selectedControllableId = "Tacx-T2900-BLE-7548";
+    private string _selectedControllableId = string.Empty;
     public string SelectedControllableId
     {
         get => _selectedControllableId;
@@ -705,7 +849,7 @@ public class TrainingStateService : IDisposable
         }
     }
 
-    private string _selectedHrmId = "Polar-H10-BLE-3948";
+    private string _selectedHrmId = string.Empty;
     public string SelectedHrmId
     {
         get => _selectedHrmId;
@@ -730,7 +874,7 @@ public class TrainingStateService : IDisposable
         }
     }
 
-    private string _selectedMoxyId = "Moxy-BLE-1948";
+    private string _selectedMoxyId = string.Empty;
     public string SelectedMoxyId
     {
         get => _selectedMoxyId;
@@ -748,7 +892,7 @@ public class TrainingStateService : IDisposable
         }
     }
 
-    private string _selectedCoreTempId = "Core-BLE-2849";
+    private string _selectedCoreTempId = string.Empty;
     public string SelectedCoreTempId
     {
         get => _selectedCoreTempId;
@@ -766,7 +910,7 @@ public class TrainingStateService : IDisposable
         }
     }
 
-    private string _selectedFanId = "Wahoo-Headwind-BLE-1849";
+    private string _selectedFanId = string.Empty;
     public string SelectedFanId
     {
         get => _selectedFanId;
@@ -829,6 +973,13 @@ public class TrainingStateService : IDisposable
         }
     }
 
+    private static bool IsValidBluetoothAddress(string address) =>
+        ulong.TryParse(
+            address,
+            System.Globalization.NumberStyles.HexNumber,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out _);
+
     public string GetDeviceProtocol(string deviceType, string address)
     {
         var dev = DiscoveredDevices.FirstOrDefault(d => d.Address == address && d.DeviceType == deviceType);
@@ -874,7 +1025,25 @@ public class TrainingStateService : IDisposable
 #endif
 
         IsScanning = false;
+        SelectFirstDiscoveredDeviceWhenNeeded("Controllable", SelectedControllableId,
+            value => SelectedControllableId = value);
+        SelectFirstDiscoveredDeviceWhenNeeded("HRM", SelectedHrmId,
+            value => SelectedHrmId = value);
+        SelectFirstDiscoveredDeviceWhenNeeded("Fan", SelectedFanId,
+            value => SelectedFanId = value);
         NotifyStateChanged();
+    }
+
+    private void SelectFirstDiscoveredDeviceWhenNeeded(
+        string deviceType,
+        string selectedAddress,
+        Action<string> select)
+    {
+        if (DiscoveredDevices.Any(device =>
+            device.DeviceType == deviceType && device.Address == selectedAddress)) return;
+
+        var first = DiscoveredDevices.FirstOrDefault(device => device.DeviceType == deviceType);
+        if (first != null) select(first.Address);
     }
 
 #if WINDOWS
@@ -887,7 +1056,13 @@ public class TrainingStateService : IDisposable
 
         if (!string.IsNullOrEmpty(localName))
         {
-            if (localName.Contains("KICKR", StringComparison.OrdinalIgnoreCase) || 
+            if (localName.Contains("HEADWIND", StringComparison.OrdinalIgnoreCase) ||
+                localName.Contains("Fan", StringComparison.OrdinalIgnoreCase))
+            {
+                deviceType = "Fan";
+                identified = true;
+            }
+            else if (localName.Contains("KICKR", StringComparison.OrdinalIgnoreCase) || 
                 localName.Contains("Tacx", StringComparison.OrdinalIgnoreCase) || 
                 localName.Contains("Trainer", StringComparison.OrdinalIgnoreCase) ||
                 localName.Contains("Bike", StringComparison.OrdinalIgnoreCase))
@@ -911,12 +1086,6 @@ public class TrainingStateService : IDisposable
             else if (localName.Contains("Core", StringComparison.OrdinalIgnoreCase))
             {
                 deviceType = "CoreTemp";
-                identified = true;
-            }
-            else if (localName.Contains("Headwind", StringComparison.OrdinalIgnoreCase) ||
-                     localName.Contains("Fan", StringComparison.OrdinalIgnoreCase))
-            {
-                deviceType = "Fan";
                 identified = true;
             }
         }
@@ -957,6 +1126,10 @@ public class TrainingStateService : IDisposable
         if (!identified || string.IsNullOrEmpty(localName)) return;
 
         var addressStr = args.BluetoothAddress.ToString("X");
+        if (deviceType == "Fan")
+        {
+            LogFan($"HEADWIND advertisement detected: name='{localName}', address={addressStr}, RSSI={args.RawSignalStrengthInDBm}.");
+        }
         System.Diagnostics.Debug.WriteLine($"[BLE Scan] Found device: '{localName}' ({addressStr}) - Type: {deviceType}");
         
         lock (DiscoveredDevices)
@@ -1058,8 +1231,8 @@ public class TrainingStateService : IDisposable
                                 if (cpStatus == GattCommunicationStatus.Success)
                                 {
                                     Console.WriteLine("[Trainer Control] Control Point configuré avec succès. Acquisition du contrôle...");
-                                    // Envoyer Request Control opcode (0x00) suivi de Request ID (0x01)
-                                    var buffer = new byte[] { 0x00, 0x01 }.AsBuffer();
+                                    // FTMS Request Control ne contient aucun paramètre.
+                                    var buffer = new byte[] { 0x00 }.AsBuffer();
                                     await _controlPointCharacteristic.WriteValueAsync(buffer, GattWriteOption.WriteWithResponse);
 
                                     // Envoyer la première consigne cible
@@ -1228,7 +1401,9 @@ public class TrainingStateService : IDisposable
     {
 #if WINDOWS
         if (_controlPointCharacteristic == null) return;
+        if (_targetMode == "ERG" && !_isErgModeEnabled) return;
 
+        await _trainerWriteSemaphore.WaitAsync();
         try
         {
             byte[] payload;
@@ -1238,6 +1413,18 @@ public class TrainingStateService : IDisposable
                 short power = (short)Math.Clamp(_targetPower, 0.0, 2000.0);
                 payload = new byte[] { 0x05, (byte)(power & 0xFF), (byte)((power >> 8) & 0xFF) };
             }
+            else if (_targetMode == "POWER_SLOPE")
+            {
+                // Set Indoor Bike Simulation Parameters (0x11): vent nul, pente en 0,01 %, coefficients nuls.
+                short grade = (short)Math.Round(TargetGrade * 100.0);
+                payload = new byte[]
+                {
+                    0x11,
+                    0x00, 0x00,
+                    (byte)(grade & 0xFF), (byte)((grade >> 8) & 0xFF),
+                    0x00, 0x00
+                };
+            }
             else if (_targetMode == "SLOPE")
             {
                 // Target Inclination (Opcode 0x03, sint16 en dixièmes de pourcent 0.1%)
@@ -1246,9 +1433,9 @@ public class TrainingStateService : IDisposable
             }
             else if (_targetMode == "RESISTANCE")
             {
-                // Target Resistance (Opcode 0x04, uint8/sint8)
-                byte resistance = (byte)Math.Clamp(_targetPower, 0.0, 100.0);
-                payload = new byte[] { 0x04, resistance };
+                // Target Resistance (Opcode 0x04, sint16 en unités de 0,1).
+                short resistance = (short)Math.Clamp(Math.Round(_targetPower * 10), 0, 1000);
+                payload = new byte[] { 0x04, (byte)(resistance & 0xFF), (byte)((resistance >> 8) & 0xFF) };
             }
             else
             {
@@ -1262,6 +1449,63 @@ public class TrainingStateService : IDisposable
         catch (Exception ex)
         {
             Console.WriteLine($"[Trainer Control] Erreur d'envoi de la consigne au trainer : {ex.Message}");
+        }
+        finally
+        {
+            _trainerWriteSemaphore.Release();
+        }
+#else
+        await Task.CompletedTask;
+#endif
+    }
+
+    private async Task LevelTrainerAsync()
+    {
+#if WINDOWS
+        if (_controlPointCharacteristic == null) return;
+
+        await _trainerWriteSemaphore.WaitAsync();
+        try
+        {
+            // Simulation à 0 % pour remettre physiquement le KICKR BIKE à niveau.
+            var payload = new byte[] { 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+            await _controlPointCharacteristic.WriteValueAsync(
+                payload.AsBuffer(), GattWriteOption.WriteWithResponse);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Trainer Control] Erreur de remise à niveau : {ex.Message}");
+        }
+        finally
+        {
+            _trainerWriteSemaphore.Release();
+        }
+#else
+        await Task.CompletedTask;
+#endif
+    }
+
+    private async Task DisableErgModeAsync()
+    {
+#if WINDOWS
+        if (_controlPointCharacteristic == null) return;
+
+        await _trainerWriteSemaphore.WaitAsync();
+        try
+        {
+            // Une résistance neutre libère la dernière consigne de puissance ERG.
+            var payload = new byte[] { 0x04, 0x00, 0x00 };
+            var status = await _controlPointCharacteristic.WriteValueAsync(
+                payload.AsBuffer(), GattWriteOption.WriteWithResponse);
+            Console.WriteLine($"[Trainer Control] Mode ERG désactivé - résistance neutre envoyée, résultat Bluetooth : {status}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Trainer Control] Erreur lors de la désactivation ERG : {ex.Message}");
+        }
+        finally
+        {
+            _trainerWriteSemaphore.Release();
         }
 #else
         await Task.CompletedTask;
@@ -1353,6 +1597,9 @@ public class TrainingStateService : IDisposable
         Power = powerVal;
         Cadence = cadenceVal;
         Speed = speedVal;
+        _lastTrainerMetricsAtUtc = DateTime.UtcNow;
+
+        UpdateFanSpeedFromTrainerMetrics();
 
         lock (PowerHistory)
         {
@@ -1361,6 +1608,21 @@ public class TrainingStateService : IDisposable
         }
 
         NotifyStateChanged();
+    }
+
+    private void UpdateFanSpeedFromTrainerMetrics()
+    {
+        if (!FanConnected || !IsFanOn || FanMode != "TrainerSpeed") return;
+
+        // Cadence is checked explicitly so coasting speed never leaves the fan running.
+        FanSpeed = Cadence <= 0
+            ? 0
+            : (int)Math.Clamp(
+                Math.Round(
+                    Speed / FanMaximumTrainerSpeedKph * FanMaximumAppLevel,
+                    MidpointRounding.AwayFromZero),
+                0,
+                FanMaximumAppLevel);
     }
 
     private void OnCpsValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
@@ -1429,6 +1691,7 @@ public class TrainingStateService : IDisposable
 
         Power = powerVal;
         Cadence = cadenceVal;
+        _lastTrainerMetricsAtUtc = DateTime.UtcNow;
 
         lock (PowerHistory)
         {
@@ -1566,6 +1829,7 @@ public class TrainingStateService : IDisposable
 
     private async void ConnectFanAsync()
     {
+        LogFan($"=== Connection requested; selected id='{SelectedFanId}' ===");
         Console.WriteLine($"[Fan BLE] ConnectFanAsync called for SelectedFanId: '{SelectedFanId}'");
         if (string.IsNullOrEmpty(SelectedFanId))
         {
@@ -1589,6 +1853,7 @@ public class TrainingStateService : IDisposable
             _fanDevice = await GetBluetoothDeviceAsync(address, addressType);
             if (_fanDevice == null)
             {
+                LogFan("BluetoothLEDevice creation returned null.");
                 Console.WriteLine($"[Fan BLE] GetBluetoothDeviceAsync returned null device");
                 return;
             }
@@ -1598,6 +1863,7 @@ public class TrainingStateService : IDisposable
             {
                 Console.WriteLine("[Fan BLE] Device is not paired in Windows. Attempting programmatic pairing...");
                 var pairingResult = await _fanDevice.DeviceInformation.Pairing.PairAsync();
+                LogFan($"Pairing result: {pairingResult.Status}.");
                 Console.WriteLine($"[Fan BLE] Programmatic pairing result status: {pairingResult.Status}");
             }
             else
@@ -1607,32 +1873,40 @@ public class TrainingStateService : IDisposable
 
             Console.WriteLine($"[Fan BLE] Device connected. Querying services...");
             var servicesResult = await _fanDevice.GetGattServicesAsync(BluetoothCacheMode.Uncached);
+            LogFan($"GATT service query: {servicesResult.Status}; count={servicesResult.Services.Count}.");
             Console.WriteLine($"[Fan BLE] GetGattServicesAsync status: {servicesResult.Status}");
             if (servicesResult.Status != GattCommunicationStatus.Success) return;
 
-            GattCharacteristic? foundChar = null;
-
-            foreach (var service in servicesResult.Services)
+            var fanService = servicesResult.Services.FirstOrDefault(service => service.Uuid == FanServiceUuid);
+            if (fanService == null)
             {
-                Console.WriteLine($"[Fan BLE] Service found: {service.Uuid}");
-                if (service.Uuid.ToString().StartsWith("a026", StringComparison.OrdinalIgnoreCase))
-                {
-                    var charResult = await service.GetCharacteristicsForUuidAsync(FanControlUuid);
-                    Console.WriteLine($"[Fan BLE]   GetCharacteristicsForUuidAsync for service {service.Uuid} status: {charResult.Status}");
-                    if (charResult.Status == GattCommunicationStatus.Success && charResult.Characteristics.Count > 0)
-                    {
-                        foundChar = charResult.Characteristics[0];
-                        Console.WriteLine($"[Fan BLE]   Selected control characteristic: {foundChar.Uuid}");
-                        break;
-                    }
-                }
+                LogFan($"Required service {FanServiceUuid} was not found.");
+                return;
             }
+
+            LogFan($"HEADWIND service selected: {fanService.Uuid}.");
+            var charResult = await fanService.GetCharacteristicsForUuidAsync(
+                FanControlUuid, BluetoothCacheMode.Uncached);
+            LogFan($"Control characteristic query: {charResult.Status}; count={charResult.Characteristics.Count}.");
+            var foundChar = charResult.Status == GattCommunicationStatus.Success
+                ? charResult.Characteristics.FirstOrDefault()
+                : null;
 
             if (foundChar != null)
             {
                 _fanCharacteristic = foundChar;
-                Console.WriteLine($"[Fan BLE] Characteristic {_fanCharacteristic.Uuid} selected for control!");
-                
+                LogFan($"Control characteristic selected: {_fanCharacteristic.Uuid}; properties={_fanCharacteristic.CharacteristicProperties}.");
+                _fanCharacteristic.ValueChanged -= OnFanValueChanged;
+                _fanCharacteristic.ValueChanged += OnFanValueChanged;
+                var notificationStatus = await _fanCharacteristic
+                    .WriteClientCharacteristicConfigurationDescriptorAsync(
+                        GattClientCharacteristicConfigurationDescriptorValue.Notify);
+                LogFan($"Notification subscription => {notificationStatus}.");
+                if (notificationStatus != GattCommunicationStatus.Success)
+                {
+                    return;
+                }
+
                 // Once connected, write initial mode and speed
                 await WriteFanModeAsync(FanMode);
                 if (IsFanOn)
@@ -1646,6 +1920,7 @@ public class TrainingStateService : IDisposable
             }
             else
             {
+                LogFan("No control characteristic was found.");
                 Console.WriteLine($"[Fan BLE] No writable characteristic found under any a026* service.");
             }
         }
@@ -1662,8 +1937,14 @@ public class TrainingStateService : IDisposable
         {
             if (_fanCharacteristic != null)
             {
+                _fanCharacteristic.ValueChanged -= OnFanValueChanged;
+                _ = _fanCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+                    GattClientCharacteristicConfigurationDescriptorValue.None);
                 _fanCharacteristic = null;
             }
+            _pendingFanAcknowledgement?.TrySetException(
+                new InvalidOperationException("HEADWIND disconnected during a command."));
+            _pendingFanAcknowledgement = null;
             _fanDevice?.Dispose();
             _fanDevice = null;
             Console.WriteLine($"[Fan BLE] Fan disconnected and resources disposed");
@@ -1688,19 +1969,13 @@ public class TrainingStateService : IDisposable
         {
             byte[] value = mode switch
             {
-                "HeartRate" => new byte[] { 0x04, 0x02 },
-                "TrainerSpeed" => new byte[] { 0x04, 0x03 },
-                _ => new byte[] { 0x04, 0x04 } // "Manual"
+                // Trainingify calculates HR/speed coupling itself, so direct/manual
+                // mode is required for every application-controlled mode.
+                _ => new byte[] { 0x04, 0x04, 0x00, 0x00 }
             };
 
             Console.WriteLine($"[Fan BLE] Writing mode command bytes: {BitConverter.ToString(value)} to characteristic...");
-            var writer = new DataWriter();
-            writer.WriteBytes(value);
-            var result = await _fanCharacteristic.WriteValueAsync(writer.DetachBuffer());
-            Console.WriteLine($"[Fan BLE] Mode write operation completed with result: {result}");
-            
-            // Allow the fan's microcontroler a short time to process the mode transition
-            await Task.Delay(150);
+            await SendFanCommandAndWaitForAcknowledgementAsync(value);
         }
         catch (Exception ex)
         {
@@ -1710,6 +1985,65 @@ public class TrainingStateService : IDisposable
         {
             _fanWriteSemaphore.Release();
         }
+    }
+
+    private void OnFanValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
+    {
+        var reader = DataReader.FromBuffer(args.CharacteristicValue);
+        var data = new byte[args.CharacteristicValue.Length];
+        reader.ReadBytes(data);
+        if (data.Length < 4) return;
+
+        if (data[0] == 0xFE)
+        {
+            LogFan($"RX ACK {BitConverter.ToString(data)}.");
+            if (_pendingFanAcknowledgement != null &&
+                data[1] == _pendingFanCommand && data[3] == _pendingFanValue)
+            {
+                _pendingFanAcknowledgement.TrySetResult(data);
+            }
+        }
+        else if (data[0] == 0xFD)
+        {
+            LogFan($"RX STATE {BitConverter.ToString(data)}.");
+        }
+    }
+
+    private async Task SendFanCommandAndWaitForAcknowledgementAsync(byte[] command)
+    {
+        if (_fanCharacteristic == null) throw new InvalidOperationException("HEADWIND is not connected.");
+
+        _pendingFanCommand = command[0];
+        _pendingFanValue = command[1];
+        _pendingFanAcknowledgement = new TaskCompletionSource<byte[]>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            LogFan($"TX {BitConverter.ToString(command)}.");
+            var status = await WriteFanValueAsync(_fanCharacteristic, command);
+            if (status != GattCommunicationStatus.Success)
+                throw new InvalidOperationException($"GATT write failed: {status}.");
+
+            var acknowledgement = await _pendingFanAcknowledgement.Task
+                .WaitAsync(TimeSpan.FromSeconds(1));
+            if (acknowledgement[2] != 0x01)
+                throw new InvalidOperationException(
+                    $"HEADWIND rejected command {command[0]:X2}: status {acknowledgement[2]:X2}.");
+        }
+        finally
+        {
+            _pendingFanAcknowledgement = null;
+        }
+    }
+
+    private static Task<GattCommunicationStatus> WriteFanValueAsync(
+        GattCharacteristic characteristic,
+        byte[] value)
+    {
+        var option = characteristic.CharacteristicProperties.HasFlag(GattCharacteristicProperties.WriteWithoutResponse)
+            ? GattWriteOption.WriteWithoutResponse
+            : GattWriteOption.WriteWithResponse;
+        return characteristic.WriteValueAsync(value.AsBuffer(), option).AsTask();
     }
 
     private async Task WriteFanSpeedAsync(int speedLevel)
@@ -1724,28 +2058,16 @@ public class TrainingStateService : IDisposable
         await _fanWriteSemaphore.WaitAsync();
         try
         {
-            // Map the app speed level (0-5) to Headwind physical levels (0-4)
-            byte fanLevel = speedLevel switch
-            {
-                0 => 0,
-                1 => 1,
-                2 => 2,
-                3 => 3,
-                4 => 4,
-                5 => 4,
-                _ => 0
-            };
+            // Direct speed control is accepted only in manual mode. The protocol
+            // expects a percentage (0-100), while the UI exposes levels 0-5.
+            byte[] manualMode = new byte[] { 0x04, 0x04, 0x00, 0x00 };
+            await SendFanCommandAndWaitForAcknowledgementAsync(manualMode);
 
-            byte[] value = new byte[] { 0x02, fanLevel };
+            byte fanPercentage = (byte)(Math.Clamp(speedLevel, 0, FanMaximumAppLevel) * 20);
+            byte[] value = new byte[] { 0x02, fanPercentage, 0x00, 0x00 };
 
-            Console.WriteLine($"[Fan BLE] Writing speed command bytes: {BitConverter.ToString(value)} to characteristic (level {speedLevel} -> level {fanLevel})...");
-            var writer = new DataWriter();
-            writer.WriteBytes(value);
-            var result = await _fanCharacteristic.WriteValueAsync(writer.DetachBuffer());
-            Console.WriteLine($"[Fan BLE] Speed write operation completed with result: {result}");
-            
-            // Allow the fan's microcontroller a short time to update its speed setpoint
-            await Task.Delay(150);
+            Console.WriteLine($"[Fan BLE] Writing speed command bytes: {BitConverter.ToString(value)} to characteristic (level {speedLevel} -> {fanPercentage}%)...");
+            await SendFanCommandAndWaitForAcknowledgementAsync(value);
         }
         catch (Exception ex)
         {
@@ -1754,6 +2076,25 @@ public class TrainingStateService : IDisposable
         finally
         {
             _fanWriteSemaphore.Release();
+        }
+    }
+
+    private static void LogFan(string message)
+    {
+        var line = $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss.fff zzz} [Fan BLE] {message}";
+        Console.WriteLine(line);
+
+        try
+        {
+            lock (FanLogLock)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(FanLogPath)!);
+                File.AppendAllText(FanLogPath, line + Environment.NewLine);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Fan BLE] Unable to write diagnostic log: {ex.Message}");
         }
     }
 

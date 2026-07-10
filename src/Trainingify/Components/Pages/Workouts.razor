@@ -19,7 +19,7 @@
 {
     <!-- Real-time Workout Metrics Card -->
     <div class="profile-chart-card mt-3">
-        <div class="metrics-grid grid-6-col" style="margin-bottom: 0;">
+        <div class="metrics-grid workout-metrics-grid" style="margin-bottom: 0;">
             <div class="metric-box">
                 <span class="metric-label">Puissance</span>
                 <span class="metric-value val-yellow">@(StateService.Power > 0 ? $"{StateService.Power}" : "--")</span>
@@ -42,13 +42,39 @@
             </div>
             <div class="metric-box">
                 <span class="metric-label">Pente</span>
-                <span class="metric-value">@(StateService.TargetMode == "SLOPE" ? $"{StateService.TargetPower:F1}" : "0.0")</span>
+                <span class="metric-value">@(StateService.IsPowerSlopeEnabled ? $"{StateService.TargetGrade:F1}" : StateService.TargetMode == "SLOPE" ? $"{StateService.TargetPower:F1}" : "0.0")</span>
                 <span class="metric-label">%</span>
             </div>
             <div class="metric-box">
                 <span class="metric-label">Calories</span>
                 <span class="metric-value val-orange">@(StateService.Calories > 0 ? $"{StateService.Calories:F0}" : "0")</span>
                 <span class="metric-label">Kcal</span>
+            </div>
+            <div class="metric-box erg-metric-box">
+                <span class="metric-label">Mode ERG</span>
+                <label class="device-switch erg-switch" title="Activer ou désactiver le contrôle automatique de la puissance">
+                    <input type="checkbox"
+                           checked="@StateService.IsErgModeEnabled"
+                           @onchange="ToggleErgMode"
+                           aria-label="Activer le mode ERG" />
+                    <span class="slider"></span>
+                </label>
+                <span class="metric-label erg-state @(StateService.IsErgModeEnabled ? "enabled" : "")">
+                    @(StateService.IsErgModeEnabled ? "Activé" : "Désactivé")
+                </span>
+            </div>
+            <div class="metric-box erg-metric-box">
+                <span class="metric-label">Pente selon puissance</span>
+                <label class="device-switch erg-switch" title="140 W = 0 %, 300 W = 12 % ; désactive le mode ERG">
+                    <input type="checkbox"
+                           checked="@StateService.IsPowerSlopeEnabled"
+                           @onchange="TogglePowerSlope"
+                           aria-label="Activer la pente proportionnelle à la puissance" />
+                    <span class="slider"></span>
+                </label>
+                <span class="metric-label erg-state @(StateService.IsPowerSlopeEnabled ? "enabled" : "")">
+                    @(StateService.IsPowerSlopeEnabled ? "Activé" : "Désactivé")
+                </span>
             </div>
         </div>
     </div>
@@ -155,6 +181,16 @@
     private async Task CompleteWorkout(Workout workout)
     {
         await StateService.CompleteWorkoutManuallyAsync(workout);
+    }
+
+    private void ToggleErgMode(ChangeEventArgs e)
+    {
+        StateService.IsErgModeEnabled = e.Value is bool enabled && enabled;
+    }
+
+    private void TogglePowerSlope(ChangeEventArgs e)
+    {
+        StateService.IsPowerSlopeEnabled = e.Value is bool enabled && enabled;
     }
 
     private string GetBadgeClass(string type)

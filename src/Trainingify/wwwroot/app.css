@@ -148,6 +148,38 @@ html, body {
     grid-template-columns: repeat(6, 1fr);
 }
 
+.workout-metrics-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.erg-metric-box {
+    align-items: center;
+}
+
+.erg-switch {
+    margin: 2px 0 6px;
+}
+
+.erg-state {
+    color: var(--text-muted);
+}
+
+.erg-state.enabled {
+    color: var(--accent-green);
+}
+
+@media (max-width: 1100px) {
+    .workout-metrics-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 700px) {
+    .workout-metrics-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 .metric-box {
     background-color: var(--card-color);
     border: 1px solid var(--border-color);
@@ -180,6 +212,25 @@ html, body {
 .val-green { color: var(--accent-green); }
 .val-cyan { color: var(--accent-cyan); }
 .val-muted { color: var(--text-muted); }
+
+/* Plans: keep secondary copy readable on dark cards without changing other screens. */
+.training-plans-page .text-muted {
+    color: #c7c7cc !important;
+}
+
+.training-plans-page .text-light {
+    color: #ffffff !important;
+}
+
+.training-plans-page .form-label,
+.training-plans-page .form-select,
+.training-plans-page option {
+    color: #f2f2f7 !important;
+}
+
+.training-plans-page .bg-secondary-subtle.text-muted {
+    color: #e5e5ea !important;
+}
 
 /* SVG Graph */
 .graph-container {
@@ -549,6 +600,13 @@ input:checked + .slider:before {
 .workout-status-dot.active {
     background-color: var(--accent-red);
     box-shadow: 0 0 6px var(--accent-red);
+}
+
+.workout-auto-pause {
+    color: var(--accent-yellow);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
 }
 
 .workout-controls {

@@ -16,6 +16,7 @@
     </div>
 </div>
 
+<div class="training-plans-page">
 @if (StateService.ActiveTrainingPlan != null)
 {
     <!-- Active Training Plan Dashboard -->
@@ -99,9 +100,9 @@
                         {
                             <span class="badge bg-secondary-subtle text-muted border border-secondary px-2 py-0.5 fw-bold" style="font-size: 8px; border-radius: 6px;">À VENIR</span>
                         }
-                        <span class="text-light fw-bold text-truncate" style="font-size: 14px; text-decoration: @(isCompleted ? "line-through" : "none"); opacity: @(isUpcoming ? "0.6" : "1");">@workout.Name</span>
+                        <span class="text-light fw-bold text-truncate" style="font-size: 14px; text-decoration: @(isCompleted ? "line-through" : "none"); opacity: @(isUpcoming ? "0.9" : "1");">@workout.Name</span>
                     </div>
-                    <p class="text-muted mb-0 small text-truncate" style="opacity: @(isUpcoming ? "0.5" : "0.8"); font-size: 11px;">@workout.Description</p>
+                    <p class="text-muted mb-0 small text-truncate" style="opacity: @(isUpcoming ? "0.82" : "1"); font-size: 11px;">@workout.Description</p>
                 </div>
                 <div class="text-end d-flex align-items-center gap-3">
                     <span class="text-muted small fw-bold" style="font-size: 11px; white-space: nowrap;">@workout.DurationMinutes min</span>
@@ -174,6 +175,7 @@ else
         }
     </div>
 }
+</div>
 
 @code {
     private List<string> planGroups = new();

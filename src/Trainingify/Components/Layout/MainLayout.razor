@@ -22,6 +22,10 @@
                         {
                             <span class="workout-status-dot active"></span>
                         }
+                        else if (StateService.IsWorkoutAutoPaused)
+                        {
+                            <span class="workout-auto-pause">AUTO-PAUSE</span>
+                        }
                     </div>
                     <div class="workout-controls">
                         <!-- Play/Pause -->
