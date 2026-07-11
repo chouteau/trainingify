@@ -14,20 +14,9 @@
         <!-- Sticky Bottom Panels -->
         <div class="bottom-panels">
             <!-- Active Workout Panel (shows when workout is selected/active) -->
-            @if (StateService.ActiveWorkout != null)
+            @if (StateService.ActiveWorkout != null && IsActive("/workouts"))
             {
                 <div class="active-workout-bar">
-                    <div class="workout-info">
-                        <span class="workout-title">@StateService.ActiveWorkout.Name.ToUpper()</span>
-                        @if (StateService.IsWorkoutActive)
-                        {
-                            <span class="workout-status-dot active"></span>
-                        }
-                        else if (StateService.IsWorkoutAutoPaused)
-                        {
-                            <span class="workout-auto-pause">AUTO-PAUSE</span>
-                        }
-                    </div>
                     <div class="workout-controls">
                         <!-- Play/Pause -->
                         @if (StateService.IsWorkoutActive)
@@ -52,7 +41,7 @@
                         <!-- Workout Time -->
                         <div class="workout-time">
                             <i class="bi bi-stopwatch"></i>
-                            <span>@FormatTime(StateService.ElapsedSeconds)</span>
+                            <span>@FormatTime(Math.Max(0, StateService.TotalDurationSeconds - StateService.ElapsedSeconds))</span>
                         </div>
                     </div>
                 </div>

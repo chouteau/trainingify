@@ -87,6 +87,7 @@ public class TrainingStateService : IDisposable
     public bool IsWorkoutActive { get; private set; }
     public bool IsWorkoutAutoPaused { get; private set; }
     public double ElapsedSeconds { get; private set; }
+    public double DistanceKilometers { get; private set; }
     public double IntervalSeconds { get; private set; }
     public int CurrentIntervalIndex { get; private set; }
     public double Calories { get; private set; }
@@ -511,6 +512,7 @@ public class TrainingStateService : IDisposable
     {
         ActiveWorkout = workout;
         ElapsedSeconds = 0;
+        DistanceKilometers = 0;
         IntervalSeconds = 0;
         CurrentIntervalIndex = 0;
         Calories = 0;
@@ -702,6 +704,7 @@ public class TrainingStateService : IDisposable
         }
 
         ElapsedSeconds++;
+        DistanceKilometers += Speed / 3600.0;
         Calories += Power / 1000.0;
 
         // Check if workout has finished

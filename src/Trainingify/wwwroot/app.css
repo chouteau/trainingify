@@ -234,7 +234,7 @@ html, body {
 
 .workout-controls-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
     margin-top: 14px;
 }
@@ -896,7 +896,7 @@ input:checked + .slider:before {
 /* Active Workout Bar */
 .active-workout-bar {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     background-color: #111111;
     border-top: 1px solid var(--border-color);

@@ -5,11 +5,13 @@
 <PageTitle>Trainingify - Structured Workouts</PageTitle>
 
 <div class="app-header">
-    <h1 class="app-title">Workouts</h1>
+    <h1 class="app-title">Workouts@(StateService.ActivePlanWorkout is not null ? $" : {StateService.ActivePlanWorkout.Name}" : string.Empty)</h1>
     <div class="status-indicators">
         <div class="indicator">
             <span class="bi bi-journal-text"></span>
-            <span>@StateService.AvailableWorkouts.Count entraînement(s)</span>
+            <span>@(StateService.ActivePlanWorkout is not null && StateService.ActiveTrainingPlan is not null
+                ? $"Plan : {StateService.ActiveTrainingPlan.Name}"
+                : $"{StateService.AvailableWorkouts.Count} entraînement(s)")</span>
         </div>
     </div>
 </div>
@@ -19,6 +21,11 @@
     <!-- Real-time Workout Metrics Card -->
     <div class="profile-chart-card mt-3">
         <div class="metrics-grid workout-metrics-grid" style="margin-bottom: 0;">
+            <div class="metric-box">
+                <span class="metric-label">Distance parcourue</span>
+                <span class="metric-value val-cyan">@StateService.DistanceKilometers.ToString("F2")</span>
+                <span class="metric-label">Km</span>
+            </div>
             <div class="metric-box">
                 <span class="metric-label">Puissance</span>
                 <span class="metric-value val-yellow">@(StateService.Power > 0 ? $"{StateService.Power}" : "--")</span>
@@ -38,11 +45,6 @@
                 <span class="metric-label">Vitesse</span>
                 <span class="metric-value val-cyan">@(StateService.Speed > 0 ? $"{StateService.Speed:F1}" : "--")</span>
                 <span class="metric-label">Km/h</span>
-            </div>
-            <div class="metric-box">
-                <span class="metric-label">Pente</span>
-                <span class="metric-value">@(StateService.IsPowerSlopeEnabled ? $"{StateService.TargetGrade:F1}" : StateService.TargetMode == "SLOPE" ? $"{StateService.TargetPower:F1}" : "0.0")</span>
-                <span class="metric-label">%</span>
             </div>
             <div class="metric-box">
                 <span class="metric-label">Calories</span>
@@ -96,6 +98,13 @@
                         <small>Coefficient FTP</small>
                     </div>
                     <button class="trainer-target-button intensity-adjust-button" @onclick="IncreaseWorkoutIntensity" disabled="@(StateService.WorkoutIntensityPercent >= 150)" aria-label="Augmenter l'intensité">+</button>
+                </div>
+            </div>
+            <div class="workout-intensity-card">
+                <span class="metric-label">PENTE</span>
+                <div class="trainer-target-value">
+                    <span>@(StateService.IsPowerSlopeEnabled ? $"{StateService.TargetGrade:F1}%" : StateService.TargetMode == "SLOPE" ? $"{StateService.TargetPower:F1}%" : "0.0%")</span>
+                    <small>Inclinaison</small>
                 </div>
             </div>
         </div>
