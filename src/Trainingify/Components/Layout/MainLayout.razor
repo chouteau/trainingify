@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @inject Trainingify.Services.TrainingStateService StateService
+@inject Trainingify.Services.WorkoutVoiceCoachService VoiceCoach
 @inject NavigationManager Navigation
 @implements IDisposable
 
@@ -44,6 +45,9 @@
                         <!-- Skip Block -->
                         <button class="ctrl-btn" @onclick="StateService.SkipInterval" title="Suivant">
                             <i class="bi bi-skip-forward-fill"></i>
+                        </button>
+                        <button class="ctrl-btn" @onclick="ToggleVoiceCoach" title="@(VoiceCoach.IsEnabled ? "Désactiver le coach vocal" : "Activer le coach vocal")">
+                            <i class="bi @(VoiceCoach.IsEnabled ? "bi-volume-up-fill" : "bi-volume-mute-fill")"></i>
                         </button>
                         <!-- Workout Time -->
                         <div class="workout-time">
@@ -92,6 +96,15 @@
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
         InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleVoiceCoach()
+    {
+        VoiceCoach.IsEnabled = !VoiceCoach.IsEnabled;
+        if (VoiceCoach.IsEnabled)
+        {
+            _ = VoiceCoach.TestVoiceAsync();
+        }
     }
 
     private bool IsActive(string path)

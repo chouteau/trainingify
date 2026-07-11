@@ -19,6 +19,7 @@ public static class MauiProgram
 		builder.Services.AddMauiBlazorWebView();
 		builder.Services.AddDbContextFactory<TrainingifyDbContext>();
 		builder.Services.AddSingleton<TrainingStateService>();
+		builder.Services.AddSingleton<WorkoutVoiceCoachService>();
 
 #if DEBUG
 		builder.Services.AddBlazorWebViewDeveloperTools();

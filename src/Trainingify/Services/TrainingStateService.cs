@@ -562,12 +562,12 @@ public class TrainingStateService : IDisposable
                 }
                 else
                 {
-                    DisplayIntervals.Add(new WorkoutInterval { TargetPower = currentPower, DurationSeconds = currentDuration });
+                    DisplayIntervals.Add(CreateWorkoutInterval(currentPower, currentDuration));
                     currentPower = WorkoutIntensityProfile[i];
                     currentDuration = 1;
                 }
             }
-            DisplayIntervals.Add(new WorkoutInterval { TargetPower = currentPower, DurationSeconds = currentDuration });
+            DisplayIntervals.Add(CreateWorkoutInterval(currentPower, currentDuration));
         }
 
         if (_isErgModeEnabled)
@@ -1093,6 +1093,7 @@ public class TrainingStateService : IDisposable
             else if (localName.Contains("Polar", StringComparison.OrdinalIgnoreCase) || 
                      localName.Contains("HRM", StringComparison.OrdinalIgnoreCase) || 
                      localName.Contains("H10", StringComparison.OrdinalIgnoreCase) ||
+                     localName.Contains("Fenix", StringComparison.OrdinalIgnoreCase) ||
                      localName.Contains("Heart", StringComparison.OrdinalIgnoreCase))
             {
                 deviceType = "HRM";
@@ -2230,6 +2231,23 @@ public class TrainingStateService : IDisposable
         }
     }
 
+    private WorkoutInterval CreateWorkoutInterval(int targetPower, int durationSeconds) => new()
+    {
+        TargetPower = targetPower,
+        DurationSeconds = durationSeconds,
+        TargetCadence = GetTargetCadence(targetPower)
+    };
+
+    private int GetTargetCadence(int targetPower)
+    {
+        var ftp = Profile.Ftp > 0 ? Profile.Ftp : 250;
+        var ratio = targetPower / ftp;
+        if (ratio < 0.55) return 85;
+        if (ratio < 0.90) return 90;
+        if (ratio < 1.05) return 95;
+        return 100;
+    }
+
     public void SelectWorkoutTemplate(WorkoutTemplateDto template)
     {
         var durationSeconds = CalculateDurationSeconds(template.Segments);
@@ -2597,6 +2615,7 @@ public class WorkoutInterval
 {
     public int TargetPower { get; set; }
     public int DurationSeconds { get; set; }
+    public int TargetCadence { get; set; }
 }
 
 public class WorkoutTemplateDto

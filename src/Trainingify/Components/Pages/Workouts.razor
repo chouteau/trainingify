@@ -134,7 +134,7 @@
                 var interval = StateService.DisplayIntervals[i];
                 var target = interval.TargetPower;
                 var duration = interval.DurationSeconds;
-                var targetCadence = GetTargetCadence(target);
+                var targetCadence = interval.TargetCadence;
                 var isCurrent = StateService.IsWorkoutActive && StateService.CurrentIntervalIndex == i;
                 
                 <div style="display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; flex: @duration; align-self: stretch; min-width: 2px;">
@@ -333,20 +333,6 @@
 
         // Proportional to the maximum power in this workout, scaled to max 75% height
         return Math.Clamp(((double)targetPower / maxPower) * 75.0, 0.0, 75.0);
-    }
-
-    private int GetTargetCadence(int targetPower)
-    {
-        var ftp = StateService.Profile.Ftp;
-        if (ftp <= 0) ftp = 250;
-
-        var ratio = (double)targetPower / ftp;
-
-        if (ratio < 0.55) return 85;     // Active Recovery
-        if (ratio < 0.75) return 90;     // Endurance
-        if (ratio < 0.90) return 90;     // Tempo
-        if (ratio < 1.05) return 95;     // Threshold
-        return 100;                      // VO2Max
     }
 
     private string GetBarColor(int targetPower)
