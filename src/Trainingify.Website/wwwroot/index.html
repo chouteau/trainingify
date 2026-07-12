@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trainingify - Domptez l'effort, sculptez votre puissance</title>
+    <meta name="description" content="L'application d'entraînement indoor ultime pour home trainer connectée à votre écosystème intelligent (ventilateurs, éclairages).">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,300;0,500;0,700;0,900;1,700&family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/site.css">
+</head>
+<body>
+
+    <!-- NAV BAR -->
+    <header class="navbar" id="navbar">
+        <div class="nav-container">
+            <a href="#" class="nav-logo" id="nav-logo">
+                <img src="assets/logo.png" alt="Trainingify Logo" class="logo-img">
+                <span class="logo-text">TRAININGIFY <span class="version-badge">v1.0.2 Beta</span></span>
+            </a>
+            
+            <nav class="nav-links" id="nav-links">
+                <a href="#features" class="nav-link">Fonctionnalités</a>
+                <a href="#ecosystem" class="nav-link">Écosystème</a>
+                <a href="#demo" class="nav-link">Simulateur</a>
+                <a href="#screenshots" class="nav-link">Interface</a>
+            </nav>
+            
+            <div class="nav-cta">
+                <a href="#download" class="btn btn-primary btn-glow">Rejoindre l'effort</a>
+            </div>
+            
+            <button class="menu-toggle" id="menu-toggle" aria-label="Ouvrir le menu">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- HERO SECTION -->
+    <section class="hero-section" id="hero">
+        <div class="hero-bg" style="background-image: linear-gradient(180deg, rgba(11, 12, 16, 0.4) 0%, #0b0c10 100%), url('assets/hero_cyclist.png');"></div>
+        <div class="hero-overlay"></div>
+        <div class="container hero-container">
+            <div class="hero-content">
+                <span class="badge neon-orange-border animate-fade-in"><i class="fa-solid fa-fire-flame-simple"></i> Version Beta v1.0.2 — LA SUEUR A UNE DIRECTION</span>
+                <h1 class="hero-title animate-slide-up">
+                    Domptez <span class="text-gradient-orange-red">l'effort</span>,<br>
+                    libérez la <span class="text-gradient-red-yellow">puissance</span>.
+                </h1>
+                <p class="hero-subtitle animate-slide-up-delay">
+                    L'application d'entraînement indoor multi-plateforme qui fusionne votre home trainer, votre rythme cardiaque et vos périphériques intelligents pour créer l'expérience de cyclisme la plus immersive et intense.
+                </p>
+                <div class="hero-actions animate-slide-up-double-delay">
+                    <a href="#demo" class="btn btn-primary btn-large btn-glow">Tester le couplage</a>
+                    <a href="#ecosystem" class="btn btn-secondary btn-large">Découvrir l'écosystème</a>
+                </div>
+            </div>
+        </div>
+        <div class="hero-scroll-indicator">
+            <span>DÉFILER POUR L'EFFORT</span>
+            <i class="fa-solid fa-chevron-down scroll-bounce"></i>
+        </div>
+    </section>
+
+    <!-- KEY METRICS BAR -->
+    <section class="metrics-bar">
+        <div class="container metrics-container">
+            <div class="metric-item">
+                <span class="metric-num text-gradient-orange-red">100%</span>
+                <span class="metric-label">Immersif & Connecté</span>
+            </div>
+            <div class="metric-divider"></div>
+            <div class="metric-item">
+                <span class="metric-num text-gradient-red-yellow">0 ms</span>
+                <span class="metric-label">Latence de résistance</span>
+            </div>
+            <div class="metric-divider"></div>
+            <div class="metric-item">
+                <span class="metric-num text-gradient-orange-red">Multi-OS</span>
+                <span class="metric-label">Windows, Mac, iOS, Android</span>
+            </div>
+            <div class="metric-divider"></div>
+            <div class="metric-item">
+                <span class="metric-num text-gradient-red-yellow">ANT+ / BLE</span>
+                <span class="metric-label">Couplage instantané</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- POINTS FORTS / FEATURES SECTION -->
+    <section class="features-section" id="features">
+        <div class="container">
+            <div class="section-header text-center">
+                <h2 class="section-title">Taillé pour la <span class="text-gradient-orange-red">Performance</span></h2>
+                <p class="section-description">
+                    Pas de fioritures, pas de distractions. Juste des fonctionnalités conçues pour les cyclistes exigeants qui cherchent à optimiser chaque watt et chaque goutte de sueur.
+                </p>
+            </div>
+            
+            <div class="features-grid">
+                <!-- Feature 1 -->
+                <div class="feature-card">
+                    <div class="feature-icon-wrapper">
+                        <i class="fa-solid fa-laptop-code feature-icon text-gradient-orange-red"></i>
+                    </div>
+                    <h3 class="feature-card-title">Multi-Plateforme Absolu</h3>
+                    <p class="feature-card-text">
+                        Démarrez votre séance sur votre PC Windows au garage, continuez sur votre iPad au salon ou gardez un œil sur vos watts sur votre smartphone Android. Votre progression est synchronisée dans le cloud en temps réel.
+                    </p>
+                </div>
+
+                
+                <!-- Feature 3 -->
+                <div class="feature-card">
+                    <div class="feature-icon-wrapper">
+                        <i class="fa-solid fa-heart-pulse feature-icon text-gradient-orange-red"></i>
+                    </div>
+                    <h3 class="feature-card-title">Analyses Ultra-Précises</h3>
+                    <p class="feature-card-text">
+                        Mesurez votre charge d'entraînement (TSS, IF), visualisez votre courbe de puissance critique moyenne et estimez votre taux de sudation pour ajuster précisément votre hydratation après l'effort.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ECOSYSTEM HIGHLIGHT SECTION -->
+    <section class="ecosystem-section" id="ecosystem">
+        <div class="container">
+            <div class="ecosystem-grid">
+                <div class="ecosystem-content">
+                    <span class="badge neon-red-border"><i class="fa-solid fa-network-wired"></i> LE COUPLAGE TOTAL</span>
+                    <h2 class="section-title">L'alliance parfaite du <span class="text-gradient-red-yellow">Home Trainer</span> et de votre environnement</h2>
+                    <p class="section-text">
+                        Trainingify ne se contente pas de contrôler la résistance de votre home trainer. L'application orchestre l'ensemble des périphériques de votre <strong>Pain Cave</strong> pour recréer les sensations réelles de la route et optimiser votre régulation thermique.
+                    </p>
+                    
+                    <ul class="ecosystem-list">
+                        <li>
+                            <div class="list-icon"><i class="fa-solid fa-wind text-cyan"></i></div>
+                            <div>
+                                <h4>Ventilation Intelligente Asservie</h4>
+                                <p>Plus d'interrupteurs manuels. Le ventilateur connecté s'ajuste dynamiquement à vos pulsations cardiaques ou à votre puissance. Plus l'intensité monte, plus le flux d'air se renforce pour chasser la sueur.</p>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="list-icon"><i class="fa-solid fa-volume-high text-orange"></i></div>
+                            <div>
+                                <h4>Coach Vocal de Motivation</h4>
+                                <p>Une synthèse vocale intégrée annonce vos changements de paliers de puissance et vous encourage. Pas besoin de regarder l'écran quand vous êtes à bloc, concentrez-vous sur l'effort.</p>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="list-icon"><i class="fa-solid fa-bolt text-yellow"></i></div>
+                            <div>
+                                <h4>Asservissement ERG Ultra-Fluide</h4>
+                                <p>Notre algorithme prédictif élimine la spirale de la mort en mode ERG. Si votre cadence chute, la résistance s'adapte en millisecondes pour vous permettre de relancer en toute sécurité.</p>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="ecosystem-visual">
+                    <div class="visual-card">
+                        <img src="assets/smart_setup.png" alt="Écosystème Smart Trainer et Ventilateur intelligent" class="visual-img">
+                        <div class="visual-glow-overlay"></div>
+                        <div class="visual-labels">
+                            <span class="label-tag tag-trainer"><i class="fa-solid fa-bicycle"></i> Trainer Connecté</span>
+                            <span class="label-tag tag-fan"><i class="fa-solid fa-wind"></i> Ventilateur Smart</span>
+                            <span class="label-tag tag-light"><i class="fa-solid fa-volume-high"></i> Coach Vocal</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- INTERACTIVE DEMO / PLAYGROUND SECTION -->
+    <section class="demo-section" id="demo">
+        <div class="container">
+            <div class="section-header text-center">
+                <h2 class="section-title">Faites l'expérience du <span class="text-gradient-orange-red">Contrôle Dynamique</span></h2>
+                <p class="section-description">
+                    Simulez votre effort ci-dessous. Augmentez la puissance de pédalage pour voir comment le ventilateur intelligent s'emballe en temps réel à votre intensité.
+                </p>
+            </div>
+            
+            <div class="playground-card" id="playground-card">
+                <div class="playground-grid">
+                    
+                    <!-- Panel 1: Controls -->
+                    <div class="playground-controls">
+                        <h3><i class="fa-solid fa-sliders"></i> Console de simulation</h3>
+                        <p class="control-help">Ajustez la puissance de pédalage virtuelle pour simuler votre effort :</p>
+                        
+                        <div class="power-control-group">
+                            <div class="power-display">
+                                <span class="power-label">PUISSANCE</span>
+                                <span class="power-value" id="power-val">150</span>
+                                <span class="power-unit">WATTS</span>
+                            </div>
+                            <input type="range" id="power-slider" class="power-slider" min="50" max="500" value="150" step="10">
+                        </div>
+                        
+                        <div class="metrics-grid-mini">
+                            <div class="mini-metric">
+                                <span class="mini-label"><i class="fa-solid fa-heart"></i> Cardiaque</span>
+                                <span class="mini-val" id="hr-val">115</span> <span class="mini-unit">BPM</span>
+                            </div>
+                            <div class="mini-metric">
+                                <span class="mini-label"><i class="fa-solid fa-circle-notch"></i> Cadence</span>
+                                <span class="mini-val" id="cadence-val">90</span> <span class="mini-unit">RPM</span>
+                            </div>
+                        </div>
+                        
+                        <div class="zone-indicator" id="zone-indicator">
+                            Zone d'Entraînement : <strong id="zone-name">Zone 2 (Endurance)</strong>
+                        </div>
+                    </div>
+                    
+                    <!-- Panel 2: Physical Feedback Simulation -->
+                    <div class="playground-feedback">
+                        <h3><i class="fa-solid fa-gauge-high"></i> Écosystème Réactif</h3>
+                        
+                        <div class="device-simulator-row">
+                            <!-- Fan Simulator -->
+                            <div class="fan-simulator">
+                                <span class="device-name"><i class="fa-solid fa-wind"></i> Ventilateur Smart</span>
+                                <div class="fan-casing">
+                                    <div class="fan-blades-wrapper" id="fan-blades">
+                                        <svg viewBox="0 0 100 100" class="fan-blades-svg">
+                                            <circle cx="50" cy="50" r="10" fill="#444" />
+                                            <!-- Three blades -->
+                                            <path d="M50 40 C45 25 55 10 50 5 C45 10 35 25 46 40 Z" fill="#666" />
+                                            <path d="M59 55 C73 59 86 67 91 62 C87 56 73 47 59 51 Z" fill="#666" />
+                                            <path d="M41 55 C27 59 14 67 9 62 C13 56 27 47 41 51 Z" fill="#666" />
+                                        </svg>
+                                    </div>
+                                    <div class="fan-airflow" id="fan-airflow">
+                                        <div class="airflow-line line-1"></div>
+                                        <div class="airflow-line line-2"></div>
+                                        <div class="airflow-line line-3"></div>
+                                    </div>
+                                </div>
+                                <span class="device-status" id="fan-status">Débit : Léger (30%)</span>
+                            </div>
+                            
+                            <!-- Sweat & Effort Simulator -->
+                            <div class="sweat-simulator" id="sweat-simulator">
+                                <span class="device-name"><i class="fa-solid fa-droplet"></i> Analyse de Sudation</span>
+                                <div class="virtual-room" id="virtual-room">
+                                    <div class="cyclist-silhouette">
+                                        <i class="fa-solid fa-person-biking"></i>
+                                    </div>
+                                    <div class="sweat-droplets" id="sweat-container">
+                                        <!-- Droplets generated dynamically by JS -->
+                                    </div>
+                                </div>
+                                <span class="device-status" id="sweat-status">Sudation : Nulle (Échauffement)</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SCREENSHOTS / WIREFRAME PREVIEW SECTION -->
+    <section class="screenshots-section" id="screenshots">
+        <div class="container">
+            <div class="section-header text-center">
+                <h2 class="section-title">L'interface au cœur de la <span class="text-gradient-orange-red">Sueur</span></h2>
+                <p class="section-description">
+                    Une interface sombre, épurée et optimisée pour une lisibilité maximale à haute intensité. Conçue pour être consultée en plein effort, les yeux brouillés par la fatigue.
+                </p>
+            </div>
+            
+            <div class="screenshots-grid">
+                
+                <!-- Mockup 1: Dashboard -->
+                <div class="screenshot-card">
+                    <div class="screenshot-header-bar">
+                        <span class="dot-btn green"></span>
+                        <span class="dot-btn yellow"></span>
+                        <span class="dot-btn red"></span>
+                        <span class="mock-title">TRAININGIFY DASHBOARD</span>
+                    </div>
+                    <div class="mockup-container ui-dashboard">
+                        <!-- Simulated dashboard UI using CSS/HTML -->
+                        <div class="mock-ui-header">
+                            <span>SÉANCE ACTIVE : PMA BURST 5x5</span>
+                            <span class="mock-timer">00:34:12</span>
+                        </div>
+                        
+                        <div class="mock-ui-main-metrics">
+                            <div class="metric-box box-power glow-orange">
+                                <span class="lbl">PUISSANCE</span>
+                                <span class="val pulse-text">380</span>
+                                <span class="unit">WATTS</span>
+                            </div>
+                            <div class="metrics-column">
+                                <div class="metric-box box-hr">
+                                    <span class="lbl">CARDIAQUE</span>
+                                    <span class="val"><i class="fa-solid fa-heart pulse-icon text-red"></i> 178</span>
+                                    <span class="unit">BPM</span>
+                                </div>
+                                <div class="metric-box box-cadence">
+                                    <span class="lbl">CADENCE</span>
+                                    <span class="val">98</span>
+                                    <span class="unit">RPM</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mock-ui-graph">
+                            <!-- Interval graph -->
+                            <div class="graph-bar past" style="height: 40%"></div>
+                            <div class="graph-bar past" style="height: 40%"></div>
+                            <div class="graph-bar active glow-red" style="height: 90%; background: var(--gradient-red-yellow);">
+                                <span class="graph-label">ACTUEL</span>
+                            </div>
+                            <div class="graph-bar future" style="height: 30%"></div>
+                            <div class="graph-bar future" style="height: 90%"></div>
+                            <div class="graph-bar future" style="height: 30%"></div>
+                            <div class="graph-bar future" style="height: 40%"></div>
+                        </div>
+                        
+                        <div class="mock-ui-overlay-msg">
+                            <i class="fa-solid fa-triangle-exclamation"></i> INTERVALLE PMA CIBLE : 380W - TENEZ BON !
+                        </div>
+                    </div>
+                    <div class="screenshot-info">
+                        <h3>Console de Pilotage en Course</h3>
+                        <p>Affiche vos métriques vitales en taille XXL. Les couleurs d'arrière-plan reflètent instantanément vos zones FTP pour savoir si vous êtes au-dessus ou en-dessous de la cible d'un simple coup d'œil.</p>
+                        <span class="preview-overlay-tag"><i class="fa-solid fa-crop-simple"></i> Capture d'écran finale en attente de synchronisation</span>
+                    </div>
+                </div>
+
+                
+            </div>
+        </div>
+    </section>
+
+    <!-- MOTIVATIONAL CTA SECTION -->
+    <section class="cta-section" id="download">
+        <div class="container text-center">
+            <h2 class="cta-title">La sueur n'attend pas.<br>Préparez votre <span class="text-gradient-orange-red">Pain Cave</span>.</h2>
+            <p class="cta-subtitle">
+                Téléchargez Trainingify dès aujourd'hui et transformez vos séances hivernales en un véritable laboratoire de puissance.
+            </p>
+            
+            <div class="download-platforms">
+                <a href="#" class="platform-btn">
+                    <i class="fa-brands fa-windows platform-icon"></i>
+                    <div class="platform-text">
+                        <span>Télécharger pour</span>
+                        <strong>Windows 10 / 11</strong>
+                    </div>
+                </a>
+                <a href="#" class="platform-btn">
+                    <i class="fa-brands fa-apple platform-icon"></i>
+                    <div class="platform-text">
+                        <span>Télécharger pour</span>
+                        <strong>macOS (Apple Silicon)</strong>
+                    </div>
+                </a>
+                <a href="#" class="platform-btn">
+                    <i class="fa-brands fa-app-store-ios platform-icon"></i>
+                    <div class="platform-text">
+                        <span>Télécharger dans l'</span>
+                        <strong>App Store</strong>
+                    </div>
+                </a>
+                <a href="#" class="platform-btn">
+                    <i class="fa-brands fa-google-play platform-icon"></i>
+                    <div class="platform-text">
+                        <span>Disponible sur</span>
+                        <strong>Google Play</strong>
+                    </div>
+                </a>
+            </div>
+            
+            <p class="cta-note">Compatible avec les home trainers Elite, Tacx, Wahoo, Kinetic, Saris et tous les capteurs Bluetooth / ANT+ FEC.</p>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <div class="container footer-container">
+            <div class="footer-brand">
+                <div class="footer-logo">
+                    <img src="assets/logo.png" alt="Trainingify Logo" class="logo-img">
+                    <span class="logo-text">TRAININGIFY</span>
+                </div>
+                <p class="footer-moto">"Pas de raccourcis. Rien que de la sueur."</p>
+                <div class="footer-socials">
+                    <a href="#"><i class="fa-brands fa-twitter"></i></a>
+                    <a href="#"><i class="fa-brands fa-instagram"></i></a>
+                    <a href="#"><i class="fa-brands fa-youtube"></i></a>
+                    <a href="#"><i class="fa-brands fa-strava"></i></a>
+                </div>
+            </div>
+            
+            <div class="footer-links-group">
+                <div class="footer-links-col">
+                    <h4>Application</h4>
+                    <a href="#features">Fonctionnalités</a>
+                    <a href="#ecosystem">Écosystème</a>
+                    <a href="#demo">Simulateur</a>
+                    <a href="#screenshots">Interfaces</a>
+                </div>
+                <div class="footer-links-col">
+                    <h4>Support</h4>
+                    <a href="#">Aide & Base de connaissances</a>
+                    <a href="#">Compatibilité home trainers</a>
+                    <a href="#">Statut du serveur</a>
+                    <a href="#">Contact</a>
+                </div>
+                <div class="footer-links-col">
+                    <h4>Légal</h4>
+                    <a href="#">Conditions d'utilisation</a>
+                    <a href="#">Politique de confidentialité</a>
+                    <a href="#">Mentions légales</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer-bottom">
+            <div class="container text-center">
+                <p>&copy; 2026 Trainingify Inc. Tous droits réservés. Construit pour l'effort et la sueur.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Custom JS -->
+    <script src="js/main.js"></script>
+</body>
+</html>

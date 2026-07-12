@@ -10,4 +10,5 @@
   <Project Path="src/Trainingify/Trainingify.csproj">
     <Deploy Solution="Debug|Any CPU" />
   </Project>
+  <Project Path="src/Trainingify.Website/Trainingify.Website.csproj" />
 </Solution>
