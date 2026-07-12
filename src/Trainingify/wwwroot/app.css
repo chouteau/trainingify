@@ -1,4 +1,4 @@
-:root {
+﻿:root {
     --bg-color: #000000;
     --surface-color: #0c0c0c;
     --card-color: #151515;
@@ -13,6 +13,19 @@
     --accent-blue: #007aff;
     --accent-orange: #ff9500;
 }
+
+/* Super Cols: same compact real-time banner as Workouts, kept on one line. */
+.super-climb-page .climb-metrics{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:-8px 0 14px}
+.super-climb-page .climb-metrics .metric-box{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;height:auto;min-height:70px;padding:8px 3px;background:#141414;border:1px solid rgba(255,255,255,.06);border-radius:11px}
+.super-climb-page .climb-metrics .metric-label{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#85898f;font-size:clamp(6px,1.7vw,9px);font-weight:800;text-transform:uppercase}
+.super-climb-page .climb-metrics .metric-value{margin:3px 0 2px;line-height:1;font-size:clamp(17px,4.8vw,25px);font-weight:900;white-space:nowrap}
+.super-climb-page .profile-grade-label{font-size:17px;stroke-width:4px}
+
+.super-climb-page .elevation-panel{position:relative;height:clamp(340px,calc(100dvh - 475px),640px);min-height:340px;padding:12px 10px 28px;background:#f4f6f8;border-color:#d8dde3;color:#142033}
+.super-climb-page .elevation-panel svg{display:block;width:100%;height:calc(100% - 8px);overflow:visible}
+.profile-legend{position:absolute;z-index:2;top:7px;right:10px;display:flex;border:1px solid #7f8893;border-radius:4px;overflow:hidden;background:#fff}
+.profile-legend span{padding:3px 8px;font-size:8px;font-weight:900}.grade-easy{color:#65b32e}.grade-steady{color:#1596d2}.grade-hard{color:#e69d00}.grade-very-hard{color:#f21b12}.grade-extreme{color:#25282d}
+.profile-grid{stroke:#cbd1d8;stroke-width:1;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}.profile-axis{stroke:#172334;stroke-width:2;vector-effect:non-scaling-stroke}.profile-axis-label{fill:#566170;font-size:12px;font-weight:700}.profile-segment{stroke:#f4f6f8;stroke-width:1.5;vector-effect:non-scaling-stroke}.profile-km-line{stroke:rgba(255,255,255,.75);stroke-width:1;vector-effect:non-scaling-stroke}.profile-grade-label{font-size:11px;font-weight:900;paint-order:stroke;stroke:#f4f6f8;stroke-width:3px;stroke-linejoin:round;fill:#172334}.profile-distance-title{position:absolute;bottom:3px;left:45%;font-size:9px;font-weight:900;color:#263244;letter-spacing:.06em}
 
 html, body {
     margin: 0;
@@ -172,13 +185,14 @@ html, body {
 .home-hero p { margin:0 0 25px; color:#b7b7b7; font-size:15px; }
 .home-primary-action { display:flex; align-items:center; gap:8px; border:0; border-radius:12px; padding:13px 18px; color:#111; background:linear-gradient(135deg,#ffd54a,#ffad0a); font-size:12px; font-weight:900; letter-spacing:.4px; box-shadow:0 10px 25px rgba(255,174,0,.2); }
 .home-primary-action:hover { transform:translateY(-1px); filter:brightness(1.06); }
-.home-kpi-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.home-kpi-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; }
 .home-kpi { display:grid; grid-template-columns:auto 1fr; gap:8px 13px; padding:19px; border:1px solid #242424; border-radius:18px; background:linear-gradient(145deg,#171717,#101010); }
 .home-kpi.featured { border-color:rgba(255,193,37,.25); background:linear-gradient(145deg,rgba(255,187,20,.09),#111 48%); }
 .home-kpi-icon { grid-row:1/3; display:grid; place-items:center; width:42px; height:42px; border-radius:13px; color:#ffd13f; background:rgba(255,195,29,.12); font-size:18px; }
 .home-kpi-icon.orange { color:#ff7b38; background:rgba(255,91,35,.12); }
 .home-kpi-icon.cyan { color:#39c6df; background:rgba(48,176,199,.12); }
 .home-kpi-icon.green { color:#4bd66d; background:rgba(52,199,89,.12); }
+.home-kpi-icon.purple { color:#b48cff; background:rgba(157,105,255,.12); }
 .home-kpi div { display:flex; flex-direction:column; }
 .home-kpi strong { font-size:25px; line-height:1; letter-spacing:-.7px; }
 .home-kpi div span { margin-top:7px; color:#aaa; font-size:11px; font-weight:700; }
@@ -996,6 +1010,16 @@ input:checked + .slider:before {
     font-size: 20px;
 }
 
+.nav-mountain-icon {
+    display: block;
+    height: 20px;
+    font-family: "Segoe UI Symbol", sans-serif;
+    font-size: 22px;
+    font-weight: 400;
+    line-height: 20px;
+    color: inherit;
+}
+
 .nav-item.active {
     color: var(--text-color);
 }
@@ -1003,3 +1027,4 @@ input:checked + .slider:before {
 .nav-item:active {
     color: var(--text-color);
 }
+.super-climb-page{padding:20px 18px 130px;color:var(--text-primary,#f5f7fa);min-height:100%}.super-climb-heading,.climb-session-header{display:flex;align-items:center;justify-content:space-between;gap:14px}.super-climb-heading h1,.climb-session-header h1{margin:2px 0 0;font-size:28px}.super-climb-heading>i{font-size:42px;color:#24d47b}.eyebrow,.climb-session-header small{font-size:10px;font-weight:800;letter-spacing:.16em;color:#24d47b}.super-climb-intro{color:#9ca7b5;max-width:620px}.climb-catalog{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}.climb-card{padding:0;overflow:hidden;text-align:left;border:1px solid #26323d;border-radius:18px;background:#151b22;color:inherit}.climb-card-image{height:150px;display:flex;align-items:center;justify-content:center;position:relative;background:radial-gradient(circle at 70% 25%,#60776e 0,#263b39 28%,#111921 70%)}.climb-card-image i{font-size:72px;color:#9bc7ae}.climb-card-image span{position:absolute;top:12px;right:12px;border-radius:20px;background:#24d47b;color:#07140d;padding:4px 9px;font-size:10px;font-weight:900}.climb-card-body{padding:16px}.climb-card-body small,.climb-card-body p,.catalog-notice{color:#8995a4}.climb-card-body h2{font-size:19px;margin:4px 0}.climb-card-body p{font-size:13px}.climb-card-body strong{font-size:12px;color:#24d47b}.catalog-notice{font-size:12px;margin-top:18px}.climb-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:-8px 0 14px}.climb-metrics>div{display:grid;justify-items:center;min-width:0;padding:9px 3px;border:1px solid #26323d;background:#11171e;border-radius:10px}.climb-metrics span,.climb-metrics small{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8b96a4;font-size:clamp(7px,2.2vw,10px);text-transform:uppercase}.climb-metrics strong{line-height:1;font-size:clamp(18px,6vw,30px);white-space:nowrap}.climb-session-header{margin-bottom:12px}.climb-session-header button{border:0;background:#1c252e;color:#fff;width:38px;height:38px;border-radius:50%}.climb-session-header>div{flex:1}.grade-pill{background:#ffb01f;color:#201400;border-radius:20px;padding:6px 11px;font-weight:900}.climb-warning{padding:10px 12px;margin-bottom:10px;border-radius:10px;background:#3b2b12;color:#ffd587;font-size:12px}.super-climb-map{height:clamp(260px,45vh,520px);border:1px solid #26323d;border-radius:16px;overflow:hidden;background:#10171d}.map-fallback{height:100%;display:grid;place-content:center;justify-items:center;color:#788492;gap:8px}.map-fallback i{font-size:42px}.route-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}.route-stats>div{padding:8px;text-align:center;background:#151c23;border-radius:9px}.route-stats span{display:block;color:#7f8a97;text-transform:uppercase;font-size:8px}.route-stats strong{font-size:12px}.elevation-panel{height:150px;background:#11171d;border:1px solid #26323d;border-radius:14px;padding:8px}.elevation-panel svg{width:100%;height:100%}.profile-cursor{stroke:#fff;stroke-width:3;vector-effect:non-scaling-stroke;filter:drop-shadow(0 0 3px #000)}.climb-controls{display:flex;gap:8px;margin-top:12px}.climb-controls button{flex:1;border:0;border-radius:12px;padding:13px;font-weight:800}.climb-start{background:#24d47b;color:#07140d}.climb-start:disabled{opacity:.4}.climb-pause{background:#ffb01f;color:#1c1200}.climb-stop{background:#2a323b;color:#fff}@media(max-width:430px){.super-climb-page{padding-left:10px;padding-right:10px}.climb-session-header h1{font-size:20px}.route-stats strong{font-size:10px}.super-climb-map{height:310px}}

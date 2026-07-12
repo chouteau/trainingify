@@ -71,6 +71,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="Garmin.FIT.Sdk" Version="21.205.0" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
         <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.80" />
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.80" />

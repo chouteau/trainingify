@@ -12,6 +12,8 @@ public class TrainingifyDbContext : DbContext
     public DbSet<ConnectedDevice> ConnectedDevices { get; set; } = null!;
     public DbSet<TrainingPlan> TrainingPlans { get; set; } = null!;
     public DbSet<TrainingPlanWorkout> TrainingPlanWorkouts { get; set; } = null!;
+    public DbSet<SuperClimb> SuperClimbs { get; set; } = null!;
+    public DbSet<SuperClimbSession> SuperClimbSessions { get; set; } = null!;
 
     public TrainingifyDbContext()
     {
@@ -42,17 +44,6 @@ public class TrainingifyDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-
-        // Seed some initial structured workouts for Trainingify
-        modelBuilder.Entity<Workout>().HasData(
-            new Workout { Id = 1, Name = "Dijon", Type = "VO2Max", DurationMinutes = 57, IntensityProfileJson = "[100,280,100,280,100,280,100,280,100]" },
-            new Workout { Id = 2, Name = "Chili Pepper", Type = "VO2Max", DurationMinutes = 45, IntensityProfileJson = "[100,300,100,300,100,300,100]" },
-            new Workout { Id = 3, Name = "Pasta", Type = "Threshold", DurationMinutes = 70, IntensityProfileJson = "[150,220,150,220,150]" },
-            new Workout { Id = 4, Name = "Potato Chips", Type = "Threshold", DurationMinutes = 66, IntensityProfileJson = "[120,240,120,240,120]" },
-            new Workout { Id = 5, Name = "5-1-5 Moxy", Type = "Test", DurationMinutes = 66, IntensityProfileJson = "[100,150,200,250,300,100]" },
-            new Workout { Id = 6, Name = "Baguette", Type = "Base", DurationMinutes = 90, IntensityProfileJson = "[130,130,130,130]" },
-            new Workout { Id = 7, Name = "Baguette +1", Type = "Base", DurationMinutes = 90, IntensityProfileJson = "[140,140,140,140]" }
-        );
 
         // Seed initial profile
         modelBuilder.Entity<UserProfile>().HasData(
@@ -88,6 +79,10 @@ public class CompletedSession
     public double MaxPower { get; set; }
     public double AverageHeartRate { get; set; }
     public double DurationSeconds { get; set; }
+    public double NormalizedPower { get; set; }
+    public double FtpAtCompletion { get; set; }
+    public string? FitFileName { get; set; }
+    public byte[]? FitFileData { get; set; }
 }
 
 public class ConnectedDevice
@@ -120,4 +115,32 @@ public class TrainingPlanWorkout
     public bool IsCompleted { get; set; }
     public int SequenceOrder { get; set; }
     public string Path { get; set; } = null!;
+}
+
+public class SuperClimb
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = null!;
+    public string Region { get; set; } = null!;
+    public string Country { get; set; } = null!;
+    public string Description { get; set; } = null!;
+    public string ImageUrl { get; set; } = null!;
+    public string SourceUrl { get; set; } = null!;
+    public string GpxAsset { get; set; } = null!;
+    public double DistanceMeters { get; set; }
+    public double ElevationGainMeters { get; set; }
+    public double StartElevationMeters { get; set; }
+    public double EndElevationMeters { get; set; }
+    public double AverageGradePercent { get; set; }
+    public double MaximumGradePercent { get; set; }
+}
+
+public class SuperClimbSession
+{
+    public int Id { get; set; }
+    public int SuperClimbId { get; set; }
+    public double DistanceMeters { get; set; }
+    public double DurationSeconds { get; set; }
+    public string Status { get; set; } = "Saved";
+    public DateTime UpdatedAtUtc { get; set; }
 }

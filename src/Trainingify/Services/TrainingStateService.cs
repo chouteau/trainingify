@@ -162,6 +162,18 @@ public class TrainingStateService : IDisposable
 
     public double TargetGrade => CalculateGradeFromPower(_targetPower);
 
+    public async Task SetRouteGradeAsync(double gradePercent)
+    {
+        _isErgModeEnabled = false;
+        _isPowerSlopeEnabled = false;
+        _targetMode = "SLOPE";
+        _targetPower = Math.Clamp(gradePercent, MinimumSimulatedGradePercent, MaximumSimulatedGradePercent);
+#if WINDOWS
+        await UpdateTrainerTargetAsync();
+#endif
+        NotifyStateChanged();
+    }
+
     public static double CalculateGradeFromPower(double powerWatts)
     {
         var grade = (powerWatts - LevelPowerWatts) * ReferenceGradePercent /
@@ -404,6 +416,8 @@ public class TrainingStateService : IDisposable
     // Historical Chart Data (lasts 60 seconds)
     public List<double> PowerHistory { get; private set; } = new();
     public List<double> HeartRateHistory { get; private set; } = new();
+    private readonly List<WorkoutSample> _workoutSamples = new();
+    private DateTime _workoutStartedAtUtc;
 
     public TrainingStateService(IDbContextFactory<TrainingifyDbContext> dbFactory)
     {
@@ -520,6 +534,8 @@ public class TrainingStateService : IDisposable
         IsWorkoutActive = false;
         IsWorkoutAutoPaused = false;
         _zeroCadenceTicks = 0;
+        _workoutSamples.Clear();
+        _workoutStartedAtUtc = default;
 
         // Parse intensity profile from JSON
         try
@@ -591,6 +607,11 @@ public class TrainingStateService : IDisposable
         }
         IsWorkoutAutoPaused = false;
         _zeroCadenceTicks = 0;
+        if (_workoutStartedAtUtc == default)
+        {
+            _workoutStartedAtUtc = DateTime.UtcNow;
+            _workoutSamples.Clear();
+        }
         IsWorkoutActive = true;
         _simulationTimer ??= new System.Threading.Timer(Tick, null, 0, 1000);
 #if WINDOWS
@@ -707,6 +728,7 @@ public class TrainingStateService : IDisposable
         ElapsedSeconds++;
         DistanceKilometers += Speed / 3600.0;
         Calories += Power / 1000.0;
+        RecordWorkoutSample();
 
         // Check if workout has finished
         if (ElapsedSeconds >= TotalDurationSeconds)
@@ -717,6 +739,57 @@ public class TrainingStateService : IDisposable
 
         UpdateActiveStepState();
         NotifyStateChanged();
+    }
+
+    private void RecordWorkoutSample()
+    {
+        _workoutSamples.Add(new WorkoutSample(
+            _workoutStartedAtUtc.AddSeconds(ElapsedSeconds),
+            ElapsedSeconds,
+            Power,
+            Cadence,
+            Speed,
+            HeartRate,
+            DistanceKilometers,
+            Calories,
+            CoreTemp,
+            SkinTemp,
+            SmO2,
+            THb));
+    }
+
+    private static double CalculateNormalizedPower(IReadOnlyList<WorkoutSample> samples)
+    {
+        if (samples.Count == 0) return 0;
+
+        const int windowSize = 30;
+        var rollingPowerToFourthSum = 0d;
+        var rollingPowerSum = 0d;
+        var rollingAverageCount = 0;
+        var powerWindow = new Queue<double>(windowSize);
+
+        foreach (var sample in samples)
+        {
+            powerWindow.Enqueue(sample.Power);
+            rollingPowerSum += sample.Power;
+            if (powerWindow.Count > windowSize)
+            {
+                rollingPowerSum -= powerWindow.Dequeue();
+            }
+
+            if (powerWindow.Count == windowSize)
+            {
+                rollingPowerToFourthSum += Math.Pow(rollingPowerSum / windowSize, 4);
+                rollingAverageCount++;
+            }
+        }
+
+        if (rollingAverageCount == 0)
+        {
+            return samples.Average(s => s.Power);
+        }
+
+        return Math.Pow(rollingPowerToFourthSum / rollingAverageCount, 0.25);
     }
 
     private void SimulateMetrics()
@@ -2203,6 +2276,43 @@ public class TrainingStateService : IDisposable
     }
 #endif
 
+#if !WINDOWS
+    private void UpdateFanSpeedFromTrainerMetrics()
+    {
+        if (!FanConnected || !IsFanOn || FanMode != "TrainerSpeed") return;
+
+        // Sur les plateformes sans implémentation BLE Windows, conserver le même
+        // calcul pour la simulation et l'état affiché du ventilateur.
+        FanSpeed = Cadence <= 0
+            ? 0
+            : (int)Math.Clamp(
+                Math.Round(
+                    Speed / FanMaximumTrainerSpeedKph * FanMaximumAppLevel,
+                    MidpointRounding.AwayFromZero),
+                0,
+                FanMaximumAppLevel);
+    }
+
+    private static void LogFan(string message)
+    {
+        var line = $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss.fff zzz} [Fan BLE] {message}";
+        Console.WriteLine(line);
+
+        try
+        {
+            lock (FanLogLock)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(FanLogPath)!);
+                File.AppendAllText(FanLogPath, line + Environment.NewLine);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Fan BLE] Unable to write diagnostic log: {ex.Message}");
+        }
+    }
+#endif
+
     private void UpdateActiveStepState()
     {
         if (ActiveWorkout == null || WorkoutIntensityProfile.Count == 0) return;
@@ -2509,16 +2619,25 @@ public class TrainingStateService : IDisposable
     {
         PauseWorkout();
 
+        var samples = _workoutSamples.ToArray();
+        var normalizedPower = CalculateNormalizedPower(samples);
+        var fitFile = FitActivityFileService.Create(samples, Profile.Ftp, normalizedPower);
+        var completedAt = DateTime.Now;
+
         using (var context = await _dbFactory.CreateDbContextAsync())
         {
             var session = new CompletedSession
             {
                 WorkoutName = ActiveWorkout?.Name ?? "Entraînement",
-                Date = DateTime.Now,
-                AveragePower = PowerHistory.Any() ? Math.Round(PowerHistory.Average()) : 0,
-                MaxPower = PowerHistory.Any() ? PowerHistory.Max() : 0,
-                AverageHeartRate = HeartRateHistory.Any() ? Math.Round(HeartRateHistory.Average()) : 0,
-                DurationSeconds = ElapsedSeconds
+                Date = completedAt,
+                AveragePower = samples.Length > 0 ? Math.Round(samples.Average(s => s.Power)) : 0,
+                MaxPower = samples.Length > 0 ? samples.Max(s => s.Power) : 0,
+                AverageHeartRate = samples.Length > 0 ? Math.Round(samples.Average(s => s.HeartRate)) : 0,
+                DurationSeconds = ElapsedSeconds,
+                NormalizedPower = normalizedPower,
+                FtpAtCompletion = Profile.Ftp,
+                FitFileName = $"{completedAt:yyyyMMdd-HHmmss}-{SanitizeFileName(ActiveWorkout?.Name ?? "entrainement")}.fit",
+                FitFileData = fitFile
             };
             context.CompletedSessions.Add(session);
             await context.SaveChangesAsync();
@@ -2526,6 +2645,12 @@ public class TrainingStateService : IDisposable
 
         await AdvanceActiveTrainingPlanAsync();
         NotifyStateChanged();
+    }
+
+    private static string SanitizeFileName(string value)
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        return string.Concat(value.Select(c => invalidChars.Contains(c) ? '-' : c));
     }
 
     public async Task AdvanceActiveTrainingPlanAsync()

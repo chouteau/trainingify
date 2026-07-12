@@ -61,6 +61,9 @@
                     <i class="bi bi-calendar-event-fill"></i>
                     <span>Plan</span>
                 </button>
+                <button class="nav-item @(IsActive("/super-cols") ? "active" : "")" @onclick='() => Navigation.NavigateTo("/super-cols")'>
+                    <span class="nav-mountain-icon" aria-hidden="true">⛰︎</span><span>Super Col</span>
+                </button>
                 <button class="nav-item @(IsActive("/settings") ? "active" : "")" @onclick='() => Navigation.NavigateTo("/settings")'>
                     <i class="bi bi-gear-fill"></i>
                     <span>Settings</span>

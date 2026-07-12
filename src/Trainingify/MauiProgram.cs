@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using Trainingify.Data;
 using Trainingify.Services;
 
@@ -20,6 +21,9 @@ public static class MauiProgram
 		builder.Services.AddDbContextFactory<TrainingifyDbContext>();
 		builder.Services.AddSingleton<TrainingStateService>();
 		builder.Services.AddSingleton<WorkoutVoiceCoachService>();
+		builder.Services.AddSingleton<IGpxRouteParser, GpxRouteParser>();
+		builder.Services.AddSingleton<ITrainerGradeController, TrainerGradeController>();
+		builder.Services.AddSingleton<ISuperClimbEngine, SuperClimbEngine>();
 
 #if DEBUG
 		builder.Services.AddBlazorWebViewDeveloperTools();
@@ -46,31 +50,7 @@ public static class MauiProgram
 				Directory.CreateDirectory(appDataDir);
 			}
 
-			// Check if database schema needs an update (e.g. if new tables or columns are missing)
-			bool schemaUpdateNeeded = false;
-			try
-			{
-				_ = dbContext.TrainingPlans.Any();
-				_ = dbContext.Workouts.Select(w => w.IsFtpPercentage).FirstOrDefault();
-			}
-			catch
-			{
-				schemaUpdateNeeded = true;
-			}
-
-			if (schemaUpdateNeeded)
-			{
-				try
-				{
-					dbContext.Database.EnsureDeleted();
-				}
-				catch
-				{
-					// Ignore deletion errors (e.g. file lock)
-				}
-			}
-
-			dbContext.Database.EnsureCreated();
+			dbContext.Database.Migrate();
 		}
 
 		return app;

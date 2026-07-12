@@ -53,6 +53,11 @@
             <div><strong>@(BestPower > 0 ? $"{BestPower:F0} W" : "—")</strong><span>Puissance maximale</span></div>
             <small>Votre meilleur effort</small>
         </article>
+        <article class="home-kpi">
+            <span class="home-kpi-icon purple"><i class="bi bi-activity"></i></span>
+            <div><strong>@(TotalTss > 0 ? TotalTss.ToString("F0") : "—")</strong><span>TSS cumulé</span></div>
+            <small>Charge des séances effectuées</small>
+        </article>
     </div>
 
     <div class="home-footer-stats">
@@ -68,6 +73,7 @@
     private double TotalDurationSeconds;
     private double BestPower;
     private double AveragePower;
+    private double TotalTss;
     private DateTime? LastWorkoutDate;
 
     protected override async Task OnInitializedAsync()
@@ -79,7 +85,21 @@
         TotalCalories = sessions.Sum(s => s.AveragePower * s.DurationSeconds / 1000d);
         BestPower = sessions.Count == 0 ? 0 : sessions.Max(s => s.MaxPower);
         AveragePower = sessions.Count == 0 ? 0 : sessions.Average(s => s.AveragePower);
+        TotalTss = sessions.Sum(CalculateTss);
         LastWorkoutDate = sessions.OrderByDescending(s => s.Date).Select(s => (DateTime?)s.Date).FirstOrDefault();
+    }
+
+    private double CalculateTss(CompletedSession session)
+    {
+        var ftp = session.FtpAtCompletion > 0 ? session.FtpAtCompletion : StateService.Profile.Ftp;
+        var normalizedPower = session.NormalizedPower > 0 ? session.NormalizedPower : session.AveragePower;
+        if (ftp <= 0 || session.DurationSeconds <= 0 || normalizedPower <= 0)
+        {
+            return 0;
+        }
+
+        var intensityFactor = normalizedPower / ftp;
+        return session.DurationSeconds * normalizedPower * intensityFactor / (ftp * 3600d) * 100d;
     }
 
     private string GetHeroMessage() => WorkoutCount switch

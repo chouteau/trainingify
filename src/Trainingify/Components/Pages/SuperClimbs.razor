@@ -1,0 +1,136 @@
+﻿@page "/super-cols"
+@using Trainingify.Services
+@inject TrainingStateService State
+@inject ISuperClimbEngine Engine
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="super-climb-page">
+@if (Engine.Selected is null)
+{
+    <header class="super-climb-heading"><div><span class="eyebrow">PARCOURS RÉELS</span><h1>Super Cols</h1></div><i class="bi bi-signpost-split"></i></header>
+    <p class="super-climb-intro">Affrontez des ascensions au rythme de votre home trainer. La pente de la route pilote directement la résistance.</p>
+    <div class="climb-catalog">
+    @foreach (var climb in Catalog)
+    {
+        <button class="climb-card" @onclick="() => SelectAsync(climb)">
+            <div class="climb-card-image"><i class="bi bi-mountains"></i><span>@climb.Difficulty</span></div>
+            <div class="climb-card-body"><small>@climb.Region · @climb.Country</small><h2>@climb.Name</h2><p>@climb.Description</p><strong>Découvrir le parcours <i class="bi bi-arrow-right"></i></strong></div>
+        </button>
+    }
+    </div>
+    <p class="catalog-notice"><i class="bi bi-info-circle"></i> Le catalogue de production accueillera uniquement des traces cyclables et des visuels dont la provenance et les droits ont été vérifiés.</p>
+}
+else
+{
+    <div class="metrics-grid workout-metrics-grid climb-metrics" aria-label="Métriques temps réel">
+        <div class="metric-box"><span class="metric-label">Puissance</span><span class="metric-value val-yellow">@Metric(State.Power, "F0")</span><span class="metric-label">Watts</span></div>
+        <div class="metric-box"><span class="metric-label">Vitesse</span><span class="metric-value val-cyan">@Metric(State.Speed, "F1")</span><span class="metric-label">Km/h</span></div>
+        <div class="metric-box"><span class="metric-label">Vélocité</span><span class="metric-value val-green">@Metric(State.Cadence, "F0")</span><span class="metric-label">Rpm</span></div>
+        <div class="metric-box"><span class="metric-label">Cardio</span><span class="metric-value val-red">@Metric(State.HeartRate, "F0")</span><span class="metric-label">Bpm</span></div>
+    </div>
+    <div class="climb-session-header"><button @onclick="ExitAsync" aria-label="Retour"><i class="bi bi-chevron-left"></i></button><div><small>SUPER COLS</small><h1>@Engine.Selected.Name</h1></div><span class="grade-pill">@((Engine.Position?.GradePercent ?? 0).ToString("F1")) %</span></div>
+    @if (!State.ControllableConnected)
+    {
+        <div class="climb-warning"><i class="bi bi-bluetooth"></i> Connectez un home trainer contrôlable pour démarrer.</div>
+    }
+    <div class="route-stats">
+        <div><span>Parcouru</span><strong>@(((Engine.Position?.DistanceMeters ?? 0) / 1000).ToString("F2")) km</strong></div>
+        <div><span>Restant</span><strong>@RemainingKm.ToString("F2") km</strong></div>
+        <div><span>Altitude</span><strong>@((Engine.Position?.ElevationMeters ?? 0).ToString("F0")) m</strong></div>
+        <div><span>Progression</span><strong>@Engine.ProgressPercent.ToString("F0") %</strong></div>
+    </div>
+    @if (Engine.Route is not null)
+    {
+        <div class="elevation-panel">
+            <div class="profile-legend"><span class="grade-easy">&lt; 4%</span><span class="grade-steady">4–6%</span><span class="grade-hard">6–8%</span><span class="grade-very-hard">8–10%</span><span class="grade-extreme">&gt; 10%</span></div>
+            <svg viewBox="0 0 1000 260" preserveAspectRatio="none" role="img" aria-label="Profil altimétrique coloré par difficulté">
+                @foreach (var altitude in AltitudeGrid)
+                {
+                    <line x1="45" x2="990" y1="@ProfileY(altitude)" y2="@ProfileY(altitude)" class="profile-grid" />
+                    <svg:text x="40" y="@(ProfileY(altitude) + 4)" class="profile-axis-label" text-anchor="end">@altitude m</svg:text>
+                }
+                @foreach (var segment in ProfileSegments)
+                {
+                    <polygon points="@segment.Points" fill="@GradeColor(segment.Grade)" class="profile-segment" />
+                    <svg:text x="@segment.LabelX" y="@segment.LabelY" class="profile-grade-label" text-anchor="middle">@segment.Grade.ToString("F1")%</svg:text>
+                    <line x1="@segment.X2" x2="@segment.X2" y1="@segment.Y2" y2="230" class="profile-km-line" />
+                    <svg:text x="@segment.X2" y="248" class="profile-axis-label" text-anchor="middle">@segment.Kilometer</svg:text>
+                }
+                <line x1="45" x2="990" y1="230" y2="230" class="profile-axis" />
+                <line x1="@(45 + Engine.ProgressPercent * 9.45)" x2="@(45 + Engine.ProgressPercent * 9.45)" y1="8" y2="230" class="profile-cursor"/>
+            </svg>
+            <span class="profile-distance-title">DISTANCE (KM)</span>
+        </div>
+    }
+    <div class="climb-controls">
+        @if (!Engine.IsActive)
+        {
+            <button class="climb-start" disabled="@(!CanStart)" @onclick="StartAsync"><i class="bi bi-play-fill"></i> @(Engine.IsPaused ? "Reprendre" : "Démarrer")</button>
+        }
+        else
+        {
+            <button class="climb-pause" @onclick="Engine.PauseAsync"><i class="bi bi-pause-fill"></i> Pause</button>
+        }
+        <button class="climb-stop" @onclick="ExitAsync"><i class="bi bi-stop-fill"></i> Terminer</button>
+    </div>
+}
+</div>
+
+@code {
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+    private static readonly SuperClimbCatalogItem[] Catalog = [new(1, "Col du Tourmalet — versant Campan", "Hautes-Pyrénées", "France",
+        "16,9 km d’ascension, 1 231 m de dénivelé et 7,3 % de pente moyenne jusqu’au col.", "",
+        "https://www.n-py.com/fr/grand-tourmalet/col-tourmalet/velo", "col-tourmalet-campan.gpx", "HORS CATÉGORIE"),
+        new(2, "Col du Tourmalet — versant Luz", "Hautes-Pyrénées", "France",
+        "18,8 km d’ascension, 1 374 m de dénivelé et 7,3 % de pente moyenne depuis Luz-Saint-Sauveur.", "",
+        "GPX fourni par l’utilisateur — généré avec Komoot", "col-tourmalet-luz.gpx", "HORS CATÉGORIE"),
+        new(3, "Cime de la Bonette — depuis Jausiers", "Alpes-de-Haute-Provence", "France",
+        "23,5 km d’ascension, 1 553 m de dénivelé et 6,6 % de pente moyenne jusqu’à 2 764 m.", "",
+        "GPX fourni par l’utilisateur", "cime-bonette-jausiers.gpx", "HORS CATÉGORIE"),
+        new(4, "Mont Ventoux — depuis Sault", "Vaucluse", "France",
+        "25,5 km d’ascension, 1 224 m de dénivelé et 4,5 % de pente moyenne.", "",
+        "GPX fourni par l’utilisateur", "mont-ventoux-sault.gpx", "DIFFICILE"),
+        new(5, "Mont Ventoux — depuis Bédoin", "Vaucluse", "France",
+        "20,5 km d’ascension, 1 506 m de dénivelé et 7,3 % de pente moyenne.", "",
+        "GPX fourni par l’utilisateur", "mont-ventoux-bedoin.gpx", "HORS CATÉGORIE"),
+        new(6, "Mont Ventoux — depuis Malaucène", "Vaucluse", "France",
+        "18,2 km d’ascension, 1 480 m de dénivelé et 8,0 % de pente moyenne.", "",
+        "GPX fourni par l’utilisateur", "mont-ventoux-malaucene.gpx", "HORS CATÉGORIE")];
+    private bool CanStart => State.ControllableConnected;
+    private double RemainingKm => Engine.Route is null ? 0 : Math.Max(0, Engine.Route.DistanceMeters - (Engine.Position?.DistanceMeters ?? 0)) / 1000;
+    private string Metric(double value, string format) => value > 0 ? value.ToString(format) : "--";
+    private double ProfileMin => Math.Floor(Engine.Route!.Points.Min(p => p.ElevationMeters) / 100) * 100;
+    private double ProfileMax => Math.Ceiling(Engine.Route!.Points.Max(p => p.ElevationMeters) / 100) * 100;
+    private IEnumerable<int> AltitudeGrid { get { for (var value = (int)ProfileMin; value <= ProfileMax; value += 200) yield return value; } }
+    private double ProfileX(double distance) => 45 + distance / Engine.Route!.DistanceMeters * 945;
+    private double ProfileY(double elevation) => 225 - (elevation - ProfileMin) / Math.Max(1, ProfileMax - ProfileMin) * 205;
+    private IReadOnlyList<ProfileSegment> ProfileSegments
+    {
+        get
+        {
+            var route = Engine.Route!; var result = new List<ProfileSegment>(); var startDistance = 0d; var kilometer = 1;
+            while (startDistance < route.DistanceMeters)
+            {
+                var endDistance = Math.Min(route.DistanceMeters, kilometer * 1000d);
+                var start = PointAt(startDistance); var end = PointAt(endDistance);
+                var grade = (end.ElevationMeters - start.ElevationMeters) / Math.Max(1, endDistance - startDistance) * 100;
+                var x1=ProfileX(startDistance); var x2=ProfileX(endDistance); var y1=ProfileY(start.ElevationMeters); var y2=ProfileY(end.ElevationMeters);
+                result.Add(new($"{x1:F1},{y1:F1} {x2:F1},{y2:F1} {x2:F1},230 {x1:F1},230", grade, (x1+x2)/2, Math.Min(y1,y2)-7, x2, y2, kilometer));
+                startDistance=endDistance; kilometer++;
+            }
+            return result;
+        }
+    }
+    private SuperClimbPoint PointAt(double distance) => Engine.Route!.Points.MinBy(p => Math.Abs(p.DistanceMeters-distance))!;
+    private static string GradeColor(double grade) => grade switch { < 4 => "#65b32e", < 6 => "#1596d2", < 8 => "#ffb000", < 10 => "#f21b12", _ => "#25282d" };
+    private sealed record ProfileSegment(string Points, double Grade, double LabelX, double LabelY, double X2, double Y2, int Kilometer);
+    protected override void OnInitialized() { Engine.Changed += OnChanged; State.OnStateChanged += OnChanged; }
+    private async Task SelectAsync(SuperClimbCatalogItem climb) { await Engine.SelectAsync(climb); await InvokeAsync(StateHasChanged); }
+    private async Task StartAsync() { await Engine.StartAsync(Engine.IsPaused); _cts = new(); _timer = new(TimeSpan.FromSeconds(1)); _ = RunAsync(_cts.Token); }
+    private async Task RunAsync(CancellationToken token) { try { while (_timer is not null && await _timer.WaitForNextTickAsync(token)) { await Engine.TickAsync(); await InvokeAsync(StateHasChanged); } } catch (OperationCanceledException) { } }
+    private async Task ExitAsync() { var save=false; if (Engine.IsActive || Engine.IsPaused) save=await JS.InvokeAsync<bool>("confirm", "Sauvegarder cette séance pour la reprendre plus tard ?"); _cts?.Cancel(); await Engine.StopAsync(save); Engine.ClearSelection(); }
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+    public void Dispose() { Engine.Changed -= OnChanged; State.OnStateChanged -= OnChanged; _cts?.Cancel(); _cts?.Dispose(); _timer?.Dispose(); }
+}
