@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Trainingify">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffd54a"/><stop offset="1" stop-color="#ff9f0a"/></linearGradient></defs>
+  <path fill="url(#g)" d="M37 3 11 36h18l-4 25 28-37H35z"/>
+  <path fill="#fff" opacity=".9" d="m34 15-13 17h13l-2 13 12-16H31z"/>
+</svg>

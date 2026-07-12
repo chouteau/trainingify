@@ -87,6 +87,7 @@ public class TrainingStateService : IDisposable
     public bool IsWorkoutActive { get; private set; }
     public bool IsWorkoutAutoPaused { get; private set; }
     public double ElapsedSeconds { get; private set; }
+    public double DistanceKilometers { get; private set; }
     public double IntervalSeconds { get; private set; }
     public int CurrentIntervalIndex { get; private set; }
     public double Calories { get; private set; }
@@ -101,6 +102,26 @@ public class TrainingStateService : IDisposable
     private const double ReferenceGradePercent = 12.0;
     private const double MinimumSimulatedGradePercent = -15.0;
     private const double MaximumSimulatedGradePercent = 20.0;
+
+    private int _workoutIntensityPercent = 100;
+    public int WorkoutIntensityPercent
+    {
+        get => _workoutIntensityPercent;
+        set
+        {
+            var clampedValue = Math.Clamp(value, 50, 150);
+            if (_workoutIntensityPercent == clampedValue) return;
+
+            _workoutIntensityPercent = clampedValue;
+            if (ActiveWorkout != null && !IsWorkoutActive)
+            {
+                SelectWorkout(ActiveWorkout);
+                return;
+            }
+
+            NotifyStateChanged();
+        }
+    }
 
     // Target Power
     private string _targetMode = "ERG";
@@ -491,6 +512,7 @@ public class TrainingStateService : IDisposable
     {
         ActiveWorkout = workout;
         ElapsedSeconds = 0;
+        DistanceKilometers = 0;
         IntervalSeconds = 0;
         CurrentIntervalIndex = 0;
         Calories = 0;
@@ -519,7 +541,7 @@ public class TrainingStateService : IDisposable
                 var ftp = Profile.Ftp;
                 if (ftp <= 0) ftp = 250;
                 WorkoutIntensityProfile = WorkoutIntensityProfile
-                    .Select(p => (int)Math.Round(p * ftp / 100.0))
+                    .Select(p => (int)Math.Round(p * ftp / 100.0 * WorkoutIntensityPercent / 100.0))
                     .ToList();
             }
         }
@@ -542,12 +564,12 @@ public class TrainingStateService : IDisposable
                 }
                 else
                 {
-                    DisplayIntervals.Add(new WorkoutInterval { TargetPower = currentPower, DurationSeconds = currentDuration });
+                    DisplayIntervals.Add(CreateWorkoutInterval(currentPower, currentDuration));
                     currentPower = WorkoutIntensityProfile[i];
                     currentDuration = 1;
                 }
             }
-            DisplayIntervals.Add(new WorkoutInterval { TargetPower = currentPower, DurationSeconds = currentDuration });
+            DisplayIntervals.Add(CreateWorkoutInterval(currentPower, currentDuration));
         }
 
         if (_isErgModeEnabled)
@@ -682,6 +704,7 @@ public class TrainingStateService : IDisposable
         }
 
         ElapsedSeconds++;
+        DistanceKilometers += Speed / 3600.0;
         Calories += Power / 1000.0;
 
         // Check if workout has finished
@@ -1073,6 +1096,7 @@ public class TrainingStateService : IDisposable
             else if (localName.Contains("Polar", StringComparison.OrdinalIgnoreCase) || 
                      localName.Contains("HRM", StringComparison.OrdinalIgnoreCase) || 
                      localName.Contains("H10", StringComparison.OrdinalIgnoreCase) ||
+                     localName.Contains("Fenix", StringComparison.OrdinalIgnoreCase) ||
                      localName.Contains("Heart", StringComparison.OrdinalIgnoreCase))
             {
                 deviceType = "HRM";
@@ -2210,6 +2234,37 @@ public class TrainingStateService : IDisposable
         }
     }
 
+    private WorkoutInterval CreateWorkoutInterval(int targetPower, int durationSeconds) => new()
+    {
+        TargetPower = targetPower,
+        DurationSeconds = durationSeconds,
+        TargetCadence = GetTargetCadence(targetPower)
+    };
+
+    private int GetTargetCadence(int targetPower)
+    {
+        var ftp = Profile.Ftp > 0 ? Profile.Ftp : 250;
+        var ratio = targetPower / ftp;
+        if (ratio < 0.55) return 85;
+        if (ratio < 0.90) return 90;
+        if (ratio < 1.05) return 95;
+        return 100;
+    }
+
+    public void SelectWorkoutTemplate(WorkoutTemplateDto template)
+    {
+        var durationSeconds = CalculateDurationSeconds(template.Segments);
+        SelectWorkout(new Workout
+        {
+            Id = 0,
+            Name = template.Name,
+            Type = "Plan",
+            DurationMinutes = (int)Math.Ceiling(durationSeconds / 60.0),
+            IntensityProfileJson = ConvertSegmentsToIntensityProfileJson(template.Segments),
+            IsFtpPercentage = true
+        });
+    }
+
     public async Task<List<string>> GetAvailableTemplateGroupsAsync()
     {
         var templates = await LoadWorkoutTemplatesAsync();
@@ -2563,6 +2618,7 @@ public class WorkoutInterval
 {
     public int TargetPower { get; set; }
     public int DurationSeconds { get; set; }
+    public int TargetCadence { get; set; }
 }
 
 public class WorkoutTemplateDto

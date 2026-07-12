@@ -1,301 +1,99 @@
 @page "/"
+@using Microsoft.EntityFrameworkCore
+@using Trainingify.Data
+@inject IDbContextFactory<TrainingifyDbContext> DbFactory
 @inject Trainingify.Services.TrainingStateService StateService
-@implements IDisposable
+@inject NavigationManager Navigation
 
-<PageTitle>Trainingify - Indoor Cycling</PageTitle>
+<PageTitle>Trainingify - Tableau de bord</PageTitle>
 
-<div class="app-header">
-    <h1 class="app-title">Trainingify</h1>
-    <div class="status-indicators">
-        <div class="indicator">
-            <span class="dot @(StateService.ControllableConnected ? "active" : "")"></span>
-            <span>Controllable</span>
+<section class="home-dashboard">
+    <header class="home-topbar">
+        <div class="brand-lockup">
+            <img src="images/trainingify-logo.svg" alt="Logo Trainingify" />
+            <div><strong>TRAININGIFY</strong><span>Ride stronger</span></div>
         </div>
-        <div class="indicator">
-            <span class="dot @(StateService.HrmConnected ? "active" : "")"></span>
-            <span>HRM</span>
+        <div class="home-device-state">
+            <span class="home-status-dot @(StateService.ControllableConnected ? "connected" : null)"></span>
+            @(StateService.ControllableConnected ? "Home trainer connecté" : "Prêt à rouler")
         </div>
-        <div class="indicator">
-            <span class="dot @(StateService.FanConnected ? "active" : "")"></span>
-            <span>Fan</span>
-        </div>
-    </div>
-</div>
+    </header>
 
-<!-- Responsive Dashboard Grid -->
-<div class="dashboard-layout">
-    <div class="dashboard-left">
-        <!-- Metrics Grid -->
-        <div class="metrics-grid grid-3-col">
-            <!-- Row 1 -->
-            <div class="metric-box">
-                <span class="metric-label">Power</span>
-                <span class="metric-value val-yellow">@(StateService.Power > 0 ? $"{StateService.Power}" : "--")</span>
-                <span class="metric-label">Watts</span>
-            </div>
-            <div class="metric-box">
-                <span class="metric-label">Interval Time</span>
-                <span class="metric-value">@FormatTime(StateService.IntervalSeconds)</span>
-                <span class="metric-label">Min:Sec</span>
-            </div>
-            <div class="metric-box">
-                <span class="metric-label">Heart Rate</span>
-                <span class="metric-value val-red">@(StateService.HeartRate > 0 ? $"{StateService.HeartRate}" : "--")</span>
-                <span class="metric-label">Bpm</span>
-            </div>
-        </div>
-
-        <div class="metrics-grid grid-3-col">
-            <!-- Row 2 -->
-            <div class="metric-box">
-                <span class="metric-label">Target</span>
-                <span class="metric-value">@(StateService.ActiveWorkout != null ? $"{StateService.TargetPower}" : "--")</span>
-                <span class="metric-label">Watts</span>
-            </div>
-            <div class="metric-box">
-                <span class="metric-label">Elapsed Time</span>
-                <span class="metric-value">@FormatTime(StateService.ElapsedSeconds)</span>
-                <span class="metric-label">Hr:Min:Sec</span>
-            </div>
-            <div class="metric-box">
-                <span class="metric-label">Cadence</span>
-                <span class="metric-value">@(StateService.Cadence > 0 ? $"{StateService.Cadence}" : "--")</span>
-                <span class="metric-label">Rpm</span>
-            </div>
-        </div>
-
-        <div class="metrics-grid grid-4-col">
-            <!-- Row 3 -->
-            <div class="metric-box">
-                <span class="metric-label">SmO2</span>
-                <span class="metric-value val-green">@(StateService.SmO2 > 0 ? $"{StateService.SmO2:F1}" : "--")</span>
-                <span class="metric-label">%</span>
-            </div>
-            <div class="metric-box">
-                <span class="metric-label">THb</span>
-                <span class="metric-value val-orange">@(StateService.THb > 0 ? $"{StateService.THb:F2}" : "--")</span>
-                <span class="metric-label">g/dL</span>
-            </div>
-            <div class="metric-box">
-                <span class="metric-label">Core</span>
-                <span class="metric-value">@(StateService.CoreTemp.HasValue ? $"{StateService.CoreTemp:F1}" : "--")</span>
-                <span class="metric-label">°C</span>
-            </div>
-            <div class="metric-box">
-                <span class="metric-label">Skin</span>
-                <span class="metric-value val-muted">@(StateService.SkinTemp.HasValue ? $"{StateService.SkinTemp:F1}" : "--")</span>
-                <span class="metric-label">°C</span>
-            </div>
+    <div class="home-hero">
+        <img class="home-hero-image" src="images/indoor-cycling-hero.png" alt="Cycliste en plein effort sur un home trainer, face à un ventilateur" />
+        <div class="home-hero-shade"></div>
+        <div class="home-hero-content">
+            <span class="home-eyebrow">VOTRE PROGRESSION</span>
+            <h1>Chaque coup de pédale<br />vous rend plus fort.</h1>
+            <p>@GetHeroMessage()</p>
+            <button class="home-primary-action" @onclick='() => Navigation.NavigateTo("/workouts")'>
+                <i class="bi bi-play-fill"></i> Démarrer un workout
+            </button>
         </div>
     </div>
 
-    <div class="dashboard-right">
-        <!-- Real-time SVG Graph -->
-        <div class="graph-container">
-            <svg width="100%" height="100%" viewBox="0 0 400 130" preserveAspectRatio="none">
-                <!-- Grid lines -->
-                <line x1="0" y1="32.5" x2="400" y2="32.5" stroke="#181818" stroke-width="1" />
-                <line x1="0" y1="65" x2="400" y2="65" stroke="#181818" stroke-width="1" />
-                <line x1="0" y1="97.5" x2="400" y2="97.5" stroke="#181818" stroke-width="1" />
-
-                <!-- Power line -->
-                @if (StateService.PowerHistory.Count > 1)
-                {
-                    <path class="graph-line graph-line-power" d="@GetSvgPath(StateService.PowerHistory, 400, 130, 0, 500)" />
-                }
-
-                <!-- Heart Rate line -->
-                @if (StateService.HeartRateHistory.Count > 1)
-                {
-                    <path class="graph-line graph-line-hr" d="@GetSvgPath(StateService.HeartRateHistory, 400, 130, 50, 200)" />
-                }
-            </svg>
-        </div>
-
-        <!-- Controls Panel -->
-        <div class="card-custom controls-panel">
-            <div class="control-modes">
-                <button class="mode-btn @(StateService.TargetMode == "ERG" ? "active" : "")" @onclick='() => SetMode("ERG")'>ERG</button>
-                <button class="mode-btn @(StateService.TargetMode == "RESISTANCE" ? "active" : "")" @onclick='() => SetMode("RESISTANCE")'>Resistance</button>
-                <button class="mode-btn @(StateService.TargetMode == "SLOPE" ? "active" : "")" @onclick='() => SetMode("SLOPE")'>Slope</button>
-            </div>
-
-            <div class="target-setter">
-                <button class="setter-btn" @onclick="DecrementTarget">-</button>
-                <div class="target-display">
-                    <span class="target-val">@StateService.TargetPower</span>
-                    <br />
-                    <span class="target-lbl">@StateService.TargetMode Target</span>
-                </div>
-                <button class="setter-btn" @onclick="IncrementTarget">+</button>
-            </div>
-        </div>
-
-        <!-- Fan Control Panel -->
-        @if (StateService.FanConnected)
-        {
-            <div class="card-custom controls-panel mt-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="fw-bold" style="color: var(--accent-cyan); font-size: 11px; letter-spacing: 1px;">
-                        <i class="bi bi-wind me-1"></i> VENTILATEUR WAHOO
-                    </span>
-                    <label class="device-switch">
-                        <input type="checkbox" checked="@StateService.IsFanOn" @onchange="ToggleFan" />
-                        <span class="slider"></span>
-                    </label>
-                </div>
-
-                @if (StateService.IsFanOn)
-                {
-                    <div class="control-modes mb-3">
-                        <button class="mode-btn @(StateService.FanMode == "Manual" ? "active" : "")" @onclick='() => SetFanMode("Manual")'>Manuel</button>
-                        <button class="mode-btn @(StateService.FanMode == "HeartRate" ? "active" : "")" @onclick='() => SetFanMode("HeartRate")'>Cardio</button>
-                        <button class="mode-btn @(StateService.FanMode == "TrainerSpeed" ? "active" : "")" @onclick='() => SetFanMode("TrainerSpeed")'>Vitesse HT</button>
-                    </div>
-
-                    @if (StateService.FanMode == "Manual")
-                    {
-                        <div class="d-flex justify-content-between align-items-center bg-black p-2 border border-secondary" style="border-radius: 8px; border-color: #333 !important;">
-                            <button class="btn btn-sm btn-outline-light px-3 py-1" style="font-size: 16px; font-weight: bold; border-color: #444;" @onclick="DecrementFanSpeed" disabled="@(StateService.FanSpeed <= 0)">-</button>
-                            <div class="text-center" style="min-width: 100px;">
-                                @if (StateService.FanSpeed == 0)
-                                {
-                                    <span class="fw-bold text-danger" style="font-size: 18px;">Arrêté</span>
-                                }
-                                else
-                                {
-                                    <span class="fw-bold text-warning" style="font-size: 18px;">Vitesse @StateService.FanSpeed</span>
-                                }
-                            </div>
-                            <button class="btn btn-sm btn-outline-light px-3 py-1" style="font-size: 16px; font-weight: bold; border-color: #444;" @onclick="IncrementFanSpeed" disabled="@(StateService.FanSpeed >= 5)">+</button>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="text-center bg-black p-2 border border-secondary text-muted" style="border-radius: 8px; border-color: #333 !important; font-size: 12px;">
-                            Vitesse : <span class="text-warning fw-bold" style="font-size: 16px;">@StateService.FanSpeed</span>
-                            <br />
-                            <span style="font-size: 10px;">Couplage actif (@(StateService.FanMode == "HeartRate" ? "FC" : "Vitesse HT"))</span>
-                        </div>
-                    }
-                }
-                else
-                {
-                    <div class="text-center text-muted py-3" style="font-size: 11px;">
-                        Le ventilateur est éteint.
-                    </div>
-                }
-            </div>
-        }
+    <div class="home-kpi-grid">
+        <article class="home-kpi featured">
+            <span class="home-kpi-icon"><i class="bi bi-lightning-charge-fill"></i></span>
+            <div><strong>@WorkoutCount</strong><span>Workouts effectués</span></div>
+            <small>Depuis vos débuts</small>
+        </article>
+        <article class="home-kpi">
+            <span class="home-kpi-icon orange"><i class="bi bi-fire"></i></span>
+            <div><strong>@FormatNumber(TotalCalories)</strong><span>Calories brûlées</span></div>
+            <small>Estimation cumulée</small>
+        </article>
+        <article class="home-kpi">
+            <span class="home-kpi-icon cyan"><i class="bi bi-stopwatch-fill"></i></span>
+            <div><strong>@FormatDuration(TotalDurationSeconds)</strong><span>Temps d'entraînement</span></div>
+            <small>Temps total en selle</small>
+        </article>
+        <article class="home-kpi">
+            <span class="home-kpi-icon green"><i class="bi bi-speedometer2"></i></span>
+            <div><strong>@(BestPower > 0 ? $"{BestPower:F0} W" : "—")</strong><span>Puissance maximale</span></div>
+            <small>Votre meilleur effort</small>
+        </article>
     </div>
-</div>
+
+    <div class="home-footer-stats">
+        <div><span>PUISSANCE MOYENNE</span><strong>@(AveragePower > 0 ? $"{AveragePower:F0} W" : "—")</strong></div>
+        <div><span>DERNIÈRE SÉANCE</span><strong>@(LastWorkoutDate?.ToString("dd MMM") ?? "—")</strong></div>
+        <div><span>FTP ACTUELLE</span><strong>@StateService.Profile.Ftp.ToString("F0") W</strong></div>
+    </div>
+</section>
 
 @code {
-    protected override void OnInitialized()
+    private int WorkoutCount;
+    private double TotalCalories;
+    private double TotalDurationSeconds;
+    private double BestPower;
+    private double AveragePower;
+    private DateTime? LastWorkoutDate;
+
+    protected override async Task OnInitializedAsync()
     {
-        StateService.OnStateChanged += HandleStateChanged;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var sessions = await db.CompletedSessions.AsNoTracking().ToListAsync();
+        WorkoutCount = sessions.Count;
+        TotalDurationSeconds = sessions.Sum(s => s.DurationSeconds);
+        TotalCalories = sessions.Sum(s => s.AveragePower * s.DurationSeconds / 1000d);
+        BestPower = sessions.Count == 0 ? 0 : sessions.Max(s => s.MaxPower);
+        AveragePower = sessions.Count == 0 ? 0 : sessions.Average(s => s.AveragePower);
+        LastWorkoutDate = sessions.OrderByDescending(s => s.Date).Select(s => (DateTime?)s.Date).FirstOrDefault();
     }
 
-    private void HandleStateChanged()
+    private string GetHeroMessage() => WorkoutCount switch
     {
-        InvokeAsync(StateHasChanged);
-    }
+        0 => "Votre prochaine progression commence ici.",
+        1 => "Votre première séance est dans les jambes. Continuez !",
+        _ => $"Déjà {WorkoutCount} séances accomplies. La prochaine vous attend."
+    };
 
-    private void SetMode(string mode)
+    private static string FormatNumber(double value) => Math.Round(value).ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("fr-FR"));
+
+    private static string FormatDuration(double seconds)
     {
-        StateService.TargetMode = mode;
-        StateService.TargetPower = mode switch
-        {
-            "ERG" => StateService.Profile.Ftp,
-            "RESISTANCE" => 25, // default resistance 25%
-            "SLOPE" => 1.5,     // default slope 1.5%
-            _ => 100
-        };
-        StateService.PauseWorkout(); // trigger update
-    }
-
-    private void IncrementTarget()
-    {
-        StateService.TargetPower += StateService.TargetMode switch
-        {
-            "ERG" => 5,
-            "RESISTANCE" => 5,
-            "SLOPE" => 0.5,
-            _ => 5
-        };
-        StateService.PauseWorkout(); // trigger update
-    }
-
-    private void DecrementTarget()
-    {
-        StateService.TargetPower = Math.Max(0, StateService.TargetPower - StateService.TargetMode switch
-        {
-            "ERG" => 5,
-            "RESISTANCE" => 5,
-            "SLOPE" => 0.5,
-            _ => 5
-        });
-        StateService.PauseWorkout(); // trigger update
-    }
-
-    private string GetSvgPath(List<double> history, double width, double height, double minVal, double maxVal)
-    {
-        var points = new List<string>();
-        var count = history.Count;
-        var range = maxVal - minVal;
-
-        for (int i = 0; i < count; i++)
-        {
-            var x = i * (width / 59.0); // max 60 elements
-            var normalizedVal = (history[i] - minVal) / range;
-            normalizedVal = Math.Clamp(normalizedVal, 0.0, 1.0);
-            var y = height - (normalizedVal * (height - 20.0)) - 10.0; // padding inside SVG
-            points.Add($"{x.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)},{y.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)}");
-        }
-
-        return "M " + string.Join(" L ", points);
-    }
-
-    private string FormatTime(double seconds)
-    {
-        var h = (int)(seconds / 3600);
-        var m = (int)((seconds % 3600) / 60);
-        var s = (int)(seconds % 60);
-        if (h > 0)
-        {
-            return $"{h:D2}:{m:D2}:{s:D2}";
-        }
-        return $"{m:D2}:{s:D2}";
-    }
-
-    private void ToggleFan(ChangeEventArgs e)
-    {
-        StateService.IsFanOn = e.Value is bool val && val;
-    }
-
-    private void SetFanMode(string mode)
-    {
-        StateService.FanMode = mode;
-    }
-
-    private void IncrementFanSpeed()
-    {
-        if (StateService.FanSpeed < 5)
-        {
-            StateService.FanSpeed++;
-        }
-    }
-
-    private void DecrementFanSpeed()
-    {
-        if (StateService.FanSpeed > 0)
-        {
-            StateService.FanSpeed--;
-        }
-    }
-
-    public void Dispose()
-    {
-        StateService.OnStateChanged -= HandleStateChanged;
+        var duration = TimeSpan.FromSeconds(seconds);
+        return duration.TotalHours >= 1 ? $"{(int)duration.TotalHours} h {duration.Minutes:D2}" : $"{duration.Minutes} min";
     }
 }

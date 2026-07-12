@@ -24,8 +24,8 @@
         <div class="d-flex justify-content-between align-items-start mb-3">
             <div>
                 <span class="text-muted fw-bold" style="font-size: 10px; letter-spacing: 1px; text-transform: uppercase;">PLAN D'ENTRAÎNEMENT ACTIF</span>
-                <h2 class="fw-extrabold text-light mb-1" style="font-size: 22px; font-weight: 800;">@StateService.ActiveTrainingPlan.Name</h2>
-                <p class="text-muted mb-0" style="font-size: 12px;">Groupe : @StateService.ActiveTrainingPlan.GroupName</p>
+                <h2 class="fw-extrabold text-light mb-1" style="font-size: 22px; font-weight: 800;">@TranslatePlanGroup(StateService.ActiveTrainingPlan.Name)</h2>
+                <p class="text-muted mb-0" style="font-size: 12px;">Groupe : @TranslatePlanGroup(StateService.ActiveTrainingPlan.GroupName)</p>
             </div>
             <button class="btn btn-sm btn-outline-danger px-2.5 py-1 fw-bold" style="border-radius: 8px; font-size: 11px;" @onclick="CancelActivePlan">
                 Abandonner le plan
@@ -56,7 +56,7 @@
             <div class="p-3 border border-warning bg-black mb-0 d-flex justify-content-between align-items-center" style="border-radius: 12px; border-color: rgba(255, 204, 0, 0.3) !important;">
                 <div style="flex: 1; min-width: 0; padding-right: 10px;">
                     <span class="badge bg-warning text-black mb-1 fw-bold" style="font-size: 9px; letter-spacing: 0.5px;">PROCHAINE SÉANCE</span>
-                    <h4 class="text-warning fw-bold mb-1 text-truncate" style="font-size: 15px;">@StateService.ActivePlanWorkout.Name</h4>
+                    <h4 class="text-warning fw-bold mb-1 text-truncate" style="font-size: 15px;">@TranslateWorkoutName(StateService.ActivePlanWorkout.Name)</h4>
                     <p class="text-muted mb-0 small text-truncate">@StateService.ActivePlanWorkout.Description</p>
                 </div>
                 <button class="btn btn-warning text-black fw-bold px-3 py-1.5" style="border-radius: 10px; font-size: 13px;" @onclick="StartWorkoutSession">
@@ -100,7 +100,7 @@
                         {
                             <span class="badge bg-secondary-subtle text-muted border border-secondary px-2 py-0.5 fw-bold" style="font-size: 8px; border-radius: 6px;">À VENIR</span>
                         }
-                        <span class="text-light fw-bold text-truncate" style="font-size: 14px; text-decoration: @(isCompleted ? "line-through" : "none"); opacity: @(isUpcoming ? "0.9" : "1");">@workout.Name</span>
+                        <span class="text-light fw-bold text-truncate" style="font-size: 14px; text-decoration: @(isCompleted ? "line-through" : "none"); opacity: @(isUpcoming ? "0.9" : "1");">@TranslateWorkoutName(workout.Name)</span>
                     </div>
                     <p class="text-muted mb-0 small text-truncate" style="opacity: @(isUpcoming ? "0.82" : "1"); font-size: 11px;">@workout.Description</p>
                 </div>
@@ -148,7 +148,7 @@ else
                     <option value="">-- Choisir un groupe --</option>
                     @foreach (var g in planGroups)
                     {
-                        <option value="@g">@g</option>
+                        <option value="@g">@TranslatePlanGroup(g)</option>
                     }
                 </select>
 
@@ -165,6 +165,35 @@ else
                             <span class="text-muted">Durée totale estimée :</span>
                             <span class="text-light fw-bold">@FormatTotalDuration(groupWorkouts)</span>
                         </div>
+                    </div>
+
+                    <div class="plan-preview mt-4">
+                        @foreach (var week in groupWorkouts
+                            .GroupBy(GetPlanWeekLabel)
+                            .OrderBy(group => GetPlanWeekOrder(group.Key)))
+                        {
+                            <section class="plan-week">
+                                <h3 class="plan-week-title">@week.Key <span>@week.Count() séance(s)</span></h3>
+                                <div class="plan-workouts-grid">
+                                    @foreach (var workout in week.OrderBy(workout => workout.Path))
+                                    {
+                                        <article class="plan-workout-preview" role="button" tabindex="0" title="Ouvrir cette séance"
+                                                 @onclick="() => OpenTemplateWorkout(workout)">
+                                            <svg class="plan-workout-chart" viewBox="0 0 160 48" preserveAspectRatio="none" role="img" aria-label="Profil d'intensité de la séance">
+                                                @foreach (var bar in GetWorkoutChartBars(workout))
+                                                {
+                                                    <rect x="@bar.X" y="@bar.Y" width="@bar.Width" height="@bar.Height" class="@bar.ZoneClass" />
+                                                }
+                                            </svg>
+                                            <div class="plan-workout-preview-details">
+                                                <span class="plan-workout-name">@TranslateWorkoutName(workout.Name)</span>
+                                                <span class="plan-workout-duration">@GetWorkoutDuration(workout) min</span>
+                                            </div>
+                                        </article>
+                                    }
+                                </div>
+                            </section>
+                        }
                     </div>
                 }
             </div>
@@ -245,7 +274,105 @@ else
             .OrderBy(t => t.Path)
             .ToList();
 
-        await StateService.StartNewTrainingPlanAsync(selectedGroup, templates);
+        await StateService.StartNewTrainingPlanAsync(TranslatePlanGroup(selectedGroup), templates);
+    }
+
+    private static string TranslateWorkoutName(string name) => System.Text.RegularExpressions.Regex.Replace(
+        name,
+        @"\bDay\s+(\d+)\b",
+        "Jour $1",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    private static string TranslatePlanGroup(string groupName) => groupName switch
+    {
+        "10-12wk FTP Builder" => "Constructeur de FTP — 10 à 12 semaines",
+        "12wk Winter plan (advanced)" => "Plan d'hiver avancé — 12 semaines",
+        "4wk FTP Booster" => "Booster de FTP — 4 semaines",
+        "60-90 minutes to burn" => "Séances de 60 à 90 minutes",
+        "6wk Beginner FTP Builder" => "Constructeur de FTP débutant — 6 semaines",
+        "8wk Race Day Prep" => "Préparation jour de course — 8 semaines",
+        "90+ minutes to burn" => "Séances de plus de 90 minutes",
+        "Absa Cape Epic" => "Absa Cape Epic",
+        "FTP Tests" => "Tests FTP",
+        "GCN" => "GCN",
+        "Hunter's Challenge" => "Défi Hunter",
+        "Less than an hour to burn" => "Séances de moins d'une heure",
+        "Olympic Tri Prep Plan" => "Plan de préparation au triathlon olympique",
+        "TimeTrials specific" => "Spécial contre-la-montre",
+        "Your First Century" => "Votre premier 160 km",
+        "Zwift Academy" => "Académie Zwift",
+        _ => groupName
+    };
+
+    private static string GetPlanWeekLabel(WorkoutTemplateDto workout)
+    {
+        var segments = workout.Path.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+        var period = segments.Skip(1).FirstOrDefault(segment =>
+            segment.StartsWith("Week", StringComparison.OrdinalIgnoreCase) ||
+            segment.StartsWith("Month", StringComparison.OrdinalIgnoreCase));
+
+        if (string.IsNullOrWhiteSpace(period)) return "Séances du plan";
+
+        return System.Text.RegularExpressions.Regex.Replace(
+            period,
+            @"\bWeek\b", "Semaine", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            .Replace("Month", "Mois", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int GetPlanWeekOrder(string label)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(label, @"\d+");
+        return match.Success && int.TryParse(match.Value, out var value) ? value : 0;
+    }
+
+    private static int GetWorkoutDuration(WorkoutTemplateDto workout)
+    {
+        var seconds = workout.Segments.Sum(segment =>
+            segment.T == "i"
+                ? (segment.R ?? 1) * ((segment.D1 ?? 0) + (segment.D2 ?? 0))
+                : segment.D1 ?? 0);
+        return (int)Math.Ceiling(seconds / 60d);
+    }
+
+    private static List<double> GetWorkoutProfile(WorkoutTemplateDto workout) => workout.Segments
+        .SelectMany(segment => Enumerable.Repeat(
+            segment.P2 ?? segment.P1 ?? 0,
+            Math.Max(1, segment.T == "i" ? segment.R ?? 1 : 1)))
+        .ToList();
+
+    private static List<WorkoutChartBar> GetWorkoutChartBars(WorkoutTemplateDto workout)
+    {
+        var profile = GetWorkoutProfile(workout);
+        if (profile.Count == 0) return new List<WorkoutChartBar>();
+
+        var width = 160d / profile.Count;
+        return profile.Select((value, index) =>
+        {
+            var height = Math.Clamp(value / 120d, 0.06, 1) * 44d;
+            return new WorkoutChartBar(
+                X: (index * width).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
+                Y: (46d - height).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
+                Width: Math.Max(1, width - 0.7d).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
+                Height: height.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
+                ZoneClass: GetZoneClass(value));
+        }).ToList();
+    }
+
+    private static string GetZoneClass(double intensity) => intensity switch
+    {
+        < 60 => "workout-zone-recovery",
+        < 75 => "workout-zone-endurance",
+        < 90 => "workout-zone-tempo",
+        < 105 => "workout-zone-threshold",
+        _ => "workout-zone-vo2"
+    };
+
+    private sealed record WorkoutChartBar(string X, string Y, string Width, string Height, string ZoneClass);
+
+    private void OpenTemplateWorkout(WorkoutTemplateDto workout)
+    {
+        StateService.SelectWorkoutTemplate(workout);
+        Navigation.NavigateTo("/workouts");
     }
 
     private async Task CancelActivePlan()
