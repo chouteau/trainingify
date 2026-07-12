@@ -1,4 +1,6 @@
-﻿namespace Trainingify;
+﻿using System.Reflection;
+
+namespace Trainingify;
 
 public partial class App : Application
 {
@@ -9,6 +11,14 @@ public partial class App : Application
 
 	protected override Window CreateWindow(IActivationState? activationState)
 	{
-		return new Window(new MainPage()) { Title = "Trainingify" };
+		var version = typeof(App).Assembly
+			.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+			.InformationalVersion.Split('+', 2)[0]
+			?? throw new InvalidOperationException("Assembly informational version is missing.");
+
+		return new Window(new MainPage())
+		{
+			Title = $"{AppInfo.Current.Name} {version}"
+		};
 	}
 }
