@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @inject Trainingify.Services.TrainingStateService StateService
+@inject Trainingify.Services.WorkoutVoiceCoachService VoiceCoach
 @inject NavigationManager Navigation
 @implements IDisposable
 
@@ -13,16 +14,9 @@
         <!-- Sticky Bottom Panels -->
         <div class="bottom-panels">
             <!-- Active Workout Panel (shows when workout is selected/active) -->
-            @if (StateService.ActiveWorkout != null)
+            @if (StateService.ActiveWorkout != null && IsActive("/workouts"))
             {
                 <div class="active-workout-bar">
-                    <div class="workout-info">
-                        <span class="workout-title">@StateService.ActiveWorkout.Name.ToUpper()</span>
-                        @if (StateService.IsWorkoutActive)
-                        {
-                            <span class="workout-status-dot active"></span>
-                        }
-                    </div>
                     <div class="workout-controls">
                         <!-- Play/Pause -->
                         @if (StateService.IsWorkoutActive)
@@ -41,10 +35,13 @@
                         <button class="ctrl-btn" @onclick="StateService.SkipInterval" title="Suivant">
                             <i class="bi bi-skip-forward-fill"></i>
                         </button>
+                        <button class="ctrl-btn" @onclick="ToggleVoiceCoach" title="@(VoiceCoach.IsEnabled ? "Désactiver le coach vocal" : "Activer le coach vocal")">
+                            <i class="bi @(VoiceCoach.IsEnabled ? "bi-volume-up-fill" : "bi-volume-mute-fill")"></i>
+                        </button>
                         <!-- Workout Time -->
                         <div class="workout-time">
                             <i class="bi bi-stopwatch"></i>
-                            <span>@FormatTime(StateService.ElapsedSeconds)</span>
+                            <span>@FormatTime(Math.Max(0, StateService.TotalDurationSeconds - StateService.ElapsedSeconds))</span>
                         </div>
                     </div>
                 </div>
@@ -52,10 +49,6 @@
 
             <!-- Bottom Navigation Bar -->
             <div class="bottom-nav">
-                <button class="nav-item @(IsActive("/settings") ? "active" : "")" @onclick='() => Navigation.NavigateTo("/settings")'>
-                    <i class="bi bi-gear-fill"></i>
-                    <span>Settings</span>
-                </button>
                 <button class="nav-item @(IsActive("/") ? "active" : "")" @onclick='() => Navigation.NavigateTo("/")'>
                     <i class="bi bi-house-door-fill"></i>
                     <span>Home</span>
@@ -63,6 +56,14 @@
                 <button class="nav-item @(IsActive("/workouts") ? "active" : "")" @onclick='() => Navigation.NavigateTo("/workouts")'>
                     <i class="bi bi-bar-chart-steps"></i>
                     <span>Workouts</span>
+                </button>
+                <button class="nav-item @(IsActive("/plans") ? "active" : "")" @onclick='() => Navigation.NavigateTo("/plans")'>
+                    <i class="bi bi-calendar-event-fill"></i>
+                    <span>Plan</span>
+                </button>
+                <button class="nav-item @(IsActive("/settings") ? "active" : "")" @onclick='() => Navigation.NavigateTo("/settings")'>
+                    <i class="bi bi-gear-fill"></i>
+                    <span>Settings</span>
                 </button>
             </div>
         </div>
@@ -84,6 +85,15 @@
     private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
     {
         InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleVoiceCoach()
+    {
+        VoiceCoach.IsEnabled = !VoiceCoach.IsEnabled;
+        if (VoiceCoach.IsEnabled)
+        {
+            _ = VoiceCoach.TestVoiceAsync();
+        }
     }
 
     private bool IsActive(string path)

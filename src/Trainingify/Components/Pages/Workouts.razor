@@ -5,55 +5,175 @@
 <PageTitle>Trainingify - Structured Workouts</PageTitle>
 
 <div class="app-header">
-    <h1 class="app-title">Workouts</h1>
+    <h1 class="app-title">Workouts@(StateService.ActivePlanWorkout is not null ? $" : {StateService.ActivePlanWorkout.Name}" : string.Empty)</h1>
     <div class="status-indicators">
         <div class="indicator">
             <span class="bi bi-journal-text"></span>
-            <span>@StateService.AvailableWorkouts.Count entraînement(s)</span>
+            <span>@(StateService.ActivePlanWorkout is not null && StateService.ActiveTrainingPlan is not null
+                ? $"Plan : {StateService.ActiveTrainingPlan.Name}"
+                : $"{StateService.AvailableWorkouts.Count} entraînement(s)")</span>
         </div>
     </div>
 </div>
 
-<div class="workouts-container">
-    @foreach (var workout in StateService.AvailableWorkouts)
-    {
-        <div class="workout-item @(StateService.ActiveWorkout?.Id == workout.Id ? "active" : "")" 
-             @onclick="() => SelectWorkout(workout)">
-            <div class="workout-left">
-                <span class="workout-name">@workout.Name</span>
-                <span class="workout-meta">@workout.DurationMinutes min | <span class="workout-badge @GetBadgeClass(workout.Type)">@workout.Type</span></span>
-            </div>
-            <div class="workout-select-dot"></div>
-        </div>
-    }
-</div>
-
 @if (StateService.ActiveWorkout != null)
 {
+    <!-- Real-time Workout Metrics Card -->
     <div class="profile-chart-card mt-3">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <span class="fw-bold">Intensité du Profil : @StateService.ActiveWorkout.Name</span>
-            <span class="text-muted" style="font-size: 11px;">@StateService.ActiveWorkout.DurationMinutes min</span>
+        <div class="metrics-grid workout-metrics-grid" style="margin-bottom: 0;">
+            <div class="metric-box">
+                <span class="metric-label">Distance parcourue</span>
+                <span class="metric-value val-cyan">@StateService.DistanceKilometers.ToString("F2")</span>
+                <span class="metric-label">Km</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Puissance</span>
+                <span class="metric-value val-yellow">@(StateService.Power > 0 ? $"{StateService.Power}" : "--")</span>
+                <span class="metric-label">Watts</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Nombre de tour</span>
+                <span class="metric-value val-green">@(StateService.Cadence > 0 ? $"{StateService.Cadence}" : "--")</span>
+                <span class="metric-label">Rpm</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Cardio</span>
+                <span class="metric-value val-red">@(StateService.HeartRate > 0 ? $"{StateService.HeartRate}" : "--")</span>
+                <span class="metric-label">Bpm</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Vitesse</span>
+                <span class="metric-value val-cyan">@(StateService.Speed > 0 ? $"{StateService.Speed:F1}" : "--")</span>
+                <span class="metric-label">Km/h</span>
+            </div>
+            <div class="metric-box">
+                <span class="metric-label">Calories</span>
+                <span class="metric-value val-orange">@(StateService.Calories > 0 ? $"{StateService.Calories:F0}" : "0")</span>
+                <span class="metric-label">Kcal</span>
+            </div>
+        </div>
+
+        <div class="workout-controls-grid">
+            <div class="fan-control-panel">
+                <div class="fan-control-title"><i class="bi bi-wind"></i> Ventilateur</div>
+                <div class="fan-mode-tabs" role="group" aria-label="Mode du ventilateur">
+                    <button class="fan-mode-tab @(StateService.FanMode == "Manual" ? "active" : "")" @onclick='() => SelectFanMode("Manual")'>Manuel</button>
+                    <button class="fan-mode-tab @(StateService.FanMode == "HeartRate" ? "active" : "")" @onclick='() => SelectFanMode("HeartRate")'>Cardio</button>
+                    <button class="fan-mode-tab @(StateService.FanMode == "TrainerSpeed" ? "active" : "")" @onclick='() => SelectFanMode("TrainerSpeed")'>Vitesse</button>
+                </div>
+                <div class="fan-speed-control">
+                    <button class="trainer-target-button" @onclick="DecreaseFanSpeed" disabled="@(StateService.FanSpeed <= 0)" aria-label="Diminuer la vitesse du ventilateur">−</button>
+                    <div class="trainer-target-value">
+                        <span>@(StateService.FanSpeed * 20)%</span>
+                        <small>@GetFanModeLabel()</small>
+                    </div>
+                    <button class="trainer-target-button" @onclick="IncreaseFanSpeed" disabled="@(StateService.FanSpeed >= 5)" aria-label="Augmenter la vitesse du ventilateur">+</button>
+                </div>
+            </div>
+            <div class="trainer-control-panel">
+                <div class="trainer-mode-tabs" role="group" aria-label="Mode de contrôle du home trainer">
+                    <button class="trainer-mode-tab @(StateService.TargetMode == "ERG" ? "active" : "")" @onclick='() => SelectTrainerMode("ERG")'>ERG</button>
+                    <button class="trainer-mode-tab @(StateService.TargetMode == "RESISTANCE" ? "active" : "")" @onclick='() => SelectTrainerMode("RESISTANCE")'>Résistance</button>
+                    <button class="trainer-mode-tab @(StateService.TargetMode == "SLOPE" ? "active" : "")" @onclick='() => SelectTrainerMode("SLOPE")'>Pente</button>
+                    <button class="trainer-mode-tab @(StateService.IsPowerSlopeEnabled ? "active" : "")" @onclick='() => SelectTrainerMode("POWER_SLOPE")'>Pente auto</button>
+                </div>
+                <div class="trainer-target-control">
+                    <button class="trainer-target-button" @onclick="DecreaseTrainerTarget" aria-label="Diminuer la consigne">−</button>
+                    <div class="trainer-target-value">
+                        <span>@GetTrainerTargetValue()</span>
+                        <small>@GetTrainerTargetLabel()</small>
+                    </div>
+                    <button class="trainer-target-button" @onclick="IncreaseTrainerTarget" aria-label="Augmenter la consigne">+</button>
+                </div>
+            </div>
+            <div class="workout-intensity-card">
+                <div>
+                    <span class="metric-label">INTENSITÉ DE LA SÉANCE</span>
+                    <div class="text-muted" style="font-size: 11px;">Profil : @StateService.Profile.Ftp.ToString("F0") W · @StateService.Profile.Weight.ToString("F0") kg · @GetFtpWattsPerKg().ToString("F2") W/kg</div>
+                </div>
+                <div class="d-flex align-items-center justify-content-center gap-2">
+                    <button class="trainer-target-button intensity-adjust-button" @onclick="DecreaseWorkoutIntensity" disabled="@(StateService.WorkoutIntensityPercent <= 50)" aria-label="Réduire l'intensité">−</button>
+                    <div class="trainer-target-value">
+                        <span>@StateService.WorkoutIntensityPercent%</span>
+                        <small>Coefficient FTP</small>
+                    </div>
+                    <button class="trainer-target-button intensity-adjust-button" @onclick="IncreaseWorkoutIntensity" disabled="@(StateService.WorkoutIntensityPercent >= 150)" aria-label="Augmenter l'intensité">+</button>
+                </div>
+            </div>
+            <div class="workout-intensity-card">
+                <span class="metric-label">PENTE</span>
+                <div class="trainer-target-value">
+                    <span>@(StateService.IsPowerSlopeEnabled ? $"{StateService.TargetGrade:F1}%" : StateService.TargetMode == "SLOPE" ? $"{StateService.TargetPower:F1}%" : "0.0%")</span>
+                    <small>Inclinaison</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="profile-chart-card mt-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h4 class="fw-bold mb-0 text-warning" style="font-size: 20px;">@StateService.ActiveWorkout.Name</h4>
+                <span class="text-muted" style="font-size: 12px;">Type: <span class="workout-badge @GetBadgeClass(StateService.ActiveWorkout.Type)">@StateService.ActiveWorkout.Type</span></span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <!-- Duration modifier text box with up/down buttons -->
+                <div class="d-flex align-items-center bg-black border border-secondary" style="border-radius: 8px; height: 32px; border-color: #444 !important;">
+                    <button class="btn btn-sm btn-link text-light p-0 px-2 fw-bold" style="text-decoration: none; font-size: 14px;" @onclick="() => ChangeDuration(StateService.ActiveWorkout, -5)">-</button>
+                    <input type="number" class="bg-black text-light text-center border-0 fw-bold" 
+                           style="width: 45px; font-size: 12px; outline: none; -moz-appearance: textfield;" 
+                           value="@StateService.ActiveWorkout.DurationMinutes" 
+                           @onchange="(e) => OnDurationInputChanged(e, StateService.ActiveWorkout)" />
+                    <span class="text-muted pe-2" style="font-size: 10px; font-weight: bold;">min</span>
+                    <button class="btn btn-sm btn-link text-light p-0 px-2 fw-bold" style="text-decoration: none; font-size: 14px;" @onclick="() => ChangeDuration(StateService.ActiveWorkout, 5)">+</button>
+                </div>
+
+                <!-- Complete session manually button -->
+                <button class="btn btn-sm btn-success fw-bold px-2.5" style="border-radius: 8px; font-size: 11px; height: 32px;" 
+                        @onclick="() => CompleteWorkout(StateService.ActiveWorkout)">
+                    Terminé
+                </button>
+            </div>
         </div>
         
         <!-- Bar Chart Representation -->
         <div class="profile-bar-chart">
-            @foreach (var target in StateService.WorkoutIntensityProfile)
+            @for (int i = 0; i < StateService.DisplayIntervals.Count; i++)
             {
-                <div class="profile-bar" 
-                     style="height: @(GetBarHeight(target))%; background-color: @(GetBarColor(target));"
-                     title="Target: @(target)W">
+                var interval = StateService.DisplayIntervals[i];
+                var target = interval.TargetPower;
+                var duration = interval.DurationSeconds;
+                var targetCadence = interval.TargetCadence;
+                var isCurrent = StateService.IsWorkoutActive && StateService.CurrentIntervalIndex == i;
+                
+                <div style="display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; flex: @duration; align-self: stretch; min-width: 0;">
+                    <!-- Expected Work Label above the block -->
+                    <div style="font-size: 10px; font-weight: bold; text-align: center; margin-bottom: 6px; line-height: 1.2; color: @(isCurrent ? "var(--accent-yellow)" : "#aaa"); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">
+                        <div>@(target)W</div>
+                        <div style="color: @(isCurrent ? "var(--accent-green)" : "#777"); font-size: 9px; font-weight: normal;">@(targetCadence) RPM</div>
+                    </div>
+                    
+                    <!-- The bar itself -->
+                    <div class="profile-bar" 
+                          style="height: @(GetBarHeight(target).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))%; flex: none; background-color: @(GetBarColor(target)); width: calc(100% - 4px); border: @(isCurrent ? "2px solid #ffffff" : "none"); box-shadow: @(isCurrent ? "0 0 8px rgba(255,255,255,0.4)" : "none");"
+                          title="Target: @(target)W | Durée: @FormatIntervalDuration(duration) | Cadence: @(targetCadence) RPM">
+                    </div>
                 </div>
+            }
+            @if (StateService.ActiveWorkout != null && StateService.TotalDurationSeconds > 0)
+            {
+                var progressPercent = Math.Clamp((StateService.ElapsedSeconds / StateService.TotalDurationSeconds) * 100.0, 0.0, 100.0);
+                <div class="profile-progress-line" style="left: @(progressPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))%;"></div>
             }
         </div>
         
         <!-- Zone Legend -->
-        <div class="d-flex justify-content-between mt-2" style="font-size: 10px; color: var(--text-muted);">
-            <span>Recup (Bleu)</span>
-            <span>Endur (Vert)</span>
-            <span>Tempo (Jaune)</span>
-            <span>Seuil (Orange)</span>
-            <span>VO2 (Rouge)</span>
+        <div class="d-flex justify-content-between mt-3" style="font-size: 11px; color: var(--text-muted); font-weight: bold;">
+            <span style="color: var(--accent-blue);"><i class="bi bi-circle-fill me-1"></i>Récupération</span>
+            <span style="color: var(--accent-green);"><i class="bi bi-circle-fill me-1"></i>Endurance</span>
+            <span style="color: var(--accent-yellow);"><i class="bi bi-circle-fill me-1"></i>Tempo</span>
+            <span style="color: var(--accent-orange);"><i class="bi bi-circle-fill me-1"></i>Seuil</span>
+            <span style="color: var(--accent-red);"><i class="bi bi-circle-fill me-1"></i>VO2Max</span>
         </div>
     </div>
 }
@@ -69,10 +189,134 @@
         InvokeAsync(StateHasChanged);
     }
 
+    private void DecreaseFanSpeed()
+    {
+        StateService.FanMode = "Manual";
+        StateService.FanSpeed = Math.Max(0, StateService.FanSpeed - 1);
+    }
+
+    private void DecreaseWorkoutIntensity() => StateService.WorkoutIntensityPercent -= 5;
+
+    private void IncreaseWorkoutIntensity() => StateService.WorkoutIntensityPercent += 5;
+
+    private double GetFtpWattsPerKg() => StateService.Profile.Weight > 0
+        ? StateService.Profile.Ftp / StateService.Profile.Weight
+        : 0;
+
+    private void IncreaseFanSpeed()
+    {
+        StateService.FanMode = "Manual";
+        StateService.IsFanOn = true;
+        StateService.FanSpeed = Math.Min(5, StateService.FanSpeed + 1);
+    }
+
+    private void SelectFanMode(string mode)
+    {
+        StateService.IsFanOn = true;
+        StateService.FanMode = mode;
+    }
+
+    private string GetFanModeLabel() => StateService.FanMode switch
+    {
+        "HeartRate" => "Mode cardio",
+        "TrainerSpeed" => "Vitesse HT",
+        _ => "Mode manuel"
+    };
+
     private void SelectWorkout(Workout workout)
     {
         StateService.SelectWorkout(workout);
     }
+
+    private async Task ChangeDuration(Workout workout, int delta)
+    {
+        int newDuration = Math.Max(5, workout.DurationMinutes + delta);
+        await StateService.UpdateWorkoutDurationAsync(workout.Id, newDuration);
+    }
+
+    private async Task OnDurationInputChanged(ChangeEventArgs e, Workout workout)
+    {
+        if (e.Value is string val && int.TryParse(val, out var parsedVal))
+        {
+            int newDuration = Math.Max(5, parsedVal);
+            await StateService.UpdateWorkoutDurationAsync(workout.Id, newDuration);
+        }
+    }
+
+    private async Task CompleteWorkout(Workout workout)
+    {
+        await StateService.CompleteWorkoutManuallyAsync(workout);
+    }
+
+    private void ToggleErgMode(ChangeEventArgs e)
+    {
+        StateService.IsErgModeEnabled = e.Value is bool enabled && enabled;
+    }
+
+    private void TogglePowerSlope(ChangeEventArgs e)
+    {
+        StateService.IsPowerSlopeEnabled = e.Value is bool enabled && enabled;
+    }
+
+    private void SelectTrainerMode(string mode)
+    {
+        if (mode == "POWER_SLOPE")
+        {
+            StateService.IsPowerSlopeEnabled = true;
+            return;
+        }
+
+        StateService.IsPowerSlopeEnabled = false;
+        StateService.IsErgModeEnabled = mode == "ERG";
+        if (mode == "SLOPE")
+        {
+            StateService.TargetPower = 0;
+        }
+        StateService.TargetMode = mode;
+    }
+
+    private void DecreaseTrainerTarget()
+    {
+        StateService.TargetPower = Math.Max(GetTrainerTargetMinimum(), StateService.TargetPower - GetTrainerTargetStep());
+    }
+
+    private void IncreaseTrainerTarget()
+    {
+        StateService.TargetPower = Math.Min(GetTrainerTargetMaximum(), StateService.TargetPower + GetTrainerTargetStep());
+    }
+
+    private double GetTrainerTargetStep() => StateService.TargetMode switch
+    {
+        "ERG" => 5,
+        "RESISTANCE" => 1,
+        "SLOPE" => 0.5,
+        _ => 5
+    };
+
+    private double GetTrainerTargetMinimum() => StateService.TargetMode == "SLOPE" ? -20 : 0;
+
+    private double GetTrainerTargetMaximum() => StateService.TargetMode switch
+    {
+        "ERG" => 2_000,
+        "RESISTANCE" => 100,
+        "SLOPE" => 20,
+        _ => 2_000
+    };
+
+    private string GetTrainerTargetValue() => StateService.IsPowerSlopeEnabled
+        ? StateService.TargetGrade.ToString("F1")
+        : StateService.TargetMode == "SLOPE"
+        ? StateService.TargetPower.ToString("F1")
+        : StateService.TargetPower.ToString("F0");
+
+    private string GetTrainerTargetLabel() => StateService.TargetMode switch
+    {
+        "ERG" => "Cible ERG (W)",
+        "RESISTANCE" => "Résistance",
+        "SLOPE" => "Pente (%)",
+        "POWER_SLOPE" => "Pente auto (%)",
+        _ => "Consigne"
+    };
 
     private string GetBadgeClass(string type)
     {
@@ -88,8 +332,16 @@
 
     private double GetBarHeight(int targetPower)
     {
-        // scale to 0-350 Watts
-        return Math.Clamp((targetPower / 350.0) * 100.0, 10.0, 100.0);
+        if (StateService.WorkoutIntensityProfile == null || !StateService.WorkoutIntensityProfile.Any())
+        {
+            return 10.0;
+        }
+
+        var maxPower = StateService.WorkoutIntensityProfile.Max();
+        if (maxPower <= 0) maxPower = 350;
+
+        // Proportional to the maximum power in this workout, scaled to max 75% height
+        return Math.Clamp(((double)targetPower / maxPower) * 75.0, 0.0, 75.0);
     }
 
     private string GetBarColor(int targetPower)
@@ -104,6 +356,17 @@
         if (ratio < 0.90) return "var(--accent-yellow)";   // Zone 3 Tempo
         if (ratio < 1.05) return "var(--accent-orange)";   // Zone 4 Threshold
         return "var(--accent-red)";                        // Zone 5 VO2Max
+    }
+
+    private string FormatIntervalDuration(int seconds)
+    {
+        var m = seconds / 60;
+        var s = seconds % 60;
+        if (m > 0)
+        {
+            return s > 0 ? $"{m}m {s}s" : $"{m}m";
+        }
+        return $"{s}s";
     }
 
     public void Dispose()

@@ -10,6 +10,8 @@ public class TrainingifyDbContext : DbContext
     public DbSet<Workout> Workouts { get; set; } = null!;
     public DbSet<CompletedSession> CompletedSessions { get; set; } = null!;
     public DbSet<ConnectedDevice> ConnectedDevices { get; set; } = null!;
+    public DbSet<TrainingPlan> TrainingPlans { get; set; } = null!;
+    public DbSet<TrainingPlanWorkout> TrainingPlanWorkouts { get; set; } = null!;
 
     public TrainingifyDbContext()
     {
@@ -54,7 +56,7 @@ public class TrainingifyDbContext : DbContext
 
         // Seed initial profile
         modelBuilder.Entity<UserProfile>().HasData(
-            new UserProfile { Id = 1, Name = "Cycliste", Weight = 75, Ftp = 256 }
+            new UserProfile { Id = 1, Name = "Cycliste", Weight = 75, Ftp = 250 }
         );
     }
 }
@@ -64,7 +66,7 @@ public class UserProfile
     public int Id { get; set; }
     public string Name { get; set; } = "Cycliste";
     public double Weight { get; set; } = 75.0; // kg
-    public double Ftp { get; set; } = 256.0;   // watts
+    public double Ftp { get; set; } = 250.0;   // watts
 }
 
 public class Workout
@@ -74,6 +76,7 @@ public class Workout
     public string Type { get; set; } = null!; // e.g., VO2Max, Threshold, Test, Base
     public int DurationMinutes { get; set; }
     public string IntensityProfileJson { get; set; } = "[]"; // representation of interval levels
+    public bool IsFtpPercentage { get; set; } = false;
 }
 
 public class CompletedSession
@@ -94,4 +97,27 @@ public class ConnectedDevice
     public string DeviceType { get; set; } = null!; // Controllable, HRM, Moxy, CoreTemp
     public bool IsEnabled { get; set; }
     public string? Address { get; set; }
+}
+
+public class TrainingPlan
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = null!;
+    public string GroupName { get; set; } = null!;
+    public int CurrentWorkoutIndex { get; set; }
+    public bool IsActive { get; set; }
+    public List<TrainingPlanWorkout> Workouts { get; set; } = new();
+}
+
+public class TrainingPlanWorkout
+{
+    public int Id { get; set; }
+    public int TrainingPlanId { get; set; }
+    public string Name { get; set; } = null!;
+    public string Description { get; set; } = null!;
+    public int DurationMinutes { get; set; }
+    public string IntensityProfileJson { get; set; } = null!;
+    public bool IsCompleted { get; set; }
+    public int SequenceOrder { get; set; }
+    public string Path { get; set; } = null!;
 }
