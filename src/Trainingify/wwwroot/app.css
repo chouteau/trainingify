@@ -739,7 +739,7 @@ html, body {
 .profile-bar-chart {
     display: flex;
     align-items: flex-end;
-    gap: 4px;
+    gap: 0;
     height: 280px;
     padding: 10px 0;
     border-bottom: 2px solid var(--border-color);

@@ -146,7 +146,7 @@
                 var targetCadence = interval.TargetCadence;
                 var isCurrent = StateService.IsWorkoutActive && StateService.CurrentIntervalIndex == i;
                 
-                <div style="display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; flex: @duration; align-self: stretch; min-width: 2px;">
+                <div style="display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; flex: @duration; align-self: stretch; min-width: 0;">
                     <!-- Expected Work Label above the block -->
                     <div style="font-size: 10px; font-weight: bold; text-align: center; margin-bottom: 6px; line-height: 1.2; color: @(isCurrent ? "var(--accent-yellow)" : "#aaa"); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;">
                         <div>@(target)W</div>
@@ -155,7 +155,7 @@
                     
                     <!-- The bar itself -->
                     <div class="profile-bar" 
-                          style="height: @(GetBarHeight(target).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))%; flex: none; background-color: @(GetBarColor(target)); width: 100%; border: @(isCurrent ? "2px solid #ffffff" : "none"); box-shadow: @(isCurrent ? "0 0 8px rgba(255,255,255,0.4)" : "none");"
+                          style="height: @(GetBarHeight(target).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))%; flex: none; background-color: @(GetBarColor(target)); width: calc(100% - 4px); border: @(isCurrent ? "2px solid #ffffff" : "none"); box-shadow: @(isCurrent ? "0 0 8px rgba(255,255,255,0.4)" : "none");"
                           title="Target: @(target)W | Durée: @FormatIntervalDuration(duration) | Cadence: @(targetCadence) RPM">
                     </div>
                 </div>

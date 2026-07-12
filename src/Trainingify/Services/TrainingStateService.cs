@@ -35,6 +35,7 @@ public class TrainingStateService : IDisposable
     private GattCharacteristic? _wahooButtonsCharacteristic;
     private BluetoothLEDevice? _hrmDevice;
     private GattCharacteristic? _hrmCharacteristic;
+    private CancellationTokenSource? _hrmReconnectCts;
     private BluetoothLEDevice? _fanDevice;
     private GattCharacteristic? _fanCharacteristic;
     private readonly SemaphoreSlim _fanWriteSemaphore = new SemaphoreSlim(1, 1);
@@ -746,7 +747,8 @@ public class TrainingStateService : IDisposable
         if (_hrmCharacteristic != null) isRealHrm = true;
 #endif
 
-        if (HrmConnected && !isRealHrm)
+        var hasSelectedBluetoothHrm = IsValidBluetoothAddress(SelectedHrmId);
+        if (HrmConnected && !isRealHrm && !hasSelectedBluetoothHrm)
         {
             // Heart rate rises with higher power
             var baseHr = 70.0;
@@ -1728,8 +1730,35 @@ public class TrainingStateService : IDisposable
 
     private async void ConnectHrmAsync()
     {
-        if (string.IsNullOrEmpty(SelectedHrmId)) return;
+        _hrmReconnectCts?.Cancel();
+        _hrmReconnectCts?.Dispose();
+        _hrmReconnectCts = new CancellationTokenSource();
+        var cancellationToken = _hrmReconnectCts.Token;
 
+        while (HrmConnected && !cancellationToken.IsCancellationRequested)
+        {
+            if (await TryConnectHrmAsync(cancellationToken)) return;
+
+            if (!HrmConnected || cancellationToken.IsCancellationRequested) return;
+            HrmConnectionStatus = "Cardio introuvable — nouvelle recherche dans 5 s...";
+            NotifyStateChanged();
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+    }
+
+    private async Task<bool> TryConnectHrmAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(SelectedHrmId)) return false;
+
+        HeartRate = 0;
         HrmConnectionStatus = "Connexion en cours...";
         NotifyStateChanged();
 
@@ -1739,7 +1768,7 @@ public class TrainingStateService : IDisposable
             {
                 HrmConnectionStatus = "Adresse invalide (Simulateur)";
                 NotifyStateChanged();
-                return;
+                return false;
             }
 
             var discoveredDev = DiscoveredDevices.FirstOrDefault(d => d.Address == SelectedHrmId && d.DeviceType == "HRM");
@@ -1750,7 +1779,7 @@ public class TrainingStateService : IDisposable
             {
                 HrmConnectionStatus = "Appareil introuvable";
                 NotifyStateChanged();
-                return;
+                return false;
             }
 
             HrmConnectionStatus = "Recherche des services...";
@@ -1761,7 +1790,7 @@ public class TrainingStateService : IDisposable
             {
                 HrmConnectionStatus = $"Échec services: {servicesResult.Status}";
                 NotifyStateChanged();
-                return;
+                return false;
             }
 
             var hrmService = servicesResult.Services.FirstOrDefault(s => s.Uuid == HeartRateServiceUuid);
@@ -1773,21 +1802,28 @@ public class TrainingStateService : IDisposable
                 var charResult = await hrmService.GetCharacteristicsForUuidAsync(HeartRateMeasurementUuid);
                 if (charResult.Status == GattCommunicationStatus.Success && charResult.Characteristics.Count > 0)
                 {
-                    _hrmCharacteristic = charResult.Characteristics[0];
-                    _hrmCharacteristic.ValueChanged += OnHrmValueChanged;
-                    var status = await _hrmCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+                    var characteristic = charResult.Characteristics[0];
+                    characteristic.ValueChanged += OnHrmValueChanged;
+                    var status = await characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
                         GattClientCharacteristicConfigurationDescriptorValue.Notify);
                     
                     if (status == GattCommunicationStatus.Success)
                     {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            characteristic.ValueChanged -= OnHrmValueChanged;
+                            return false;
+                        }
+                        _hrmCharacteristic = characteristic;
                         HrmConnectionStatus = "Connecté (HRM)";
                     }
                     else
                     {
+                        characteristic.ValueChanged -= OnHrmValueChanged;
                         HrmConnectionStatus = $"Échec notifications HRM: {status}";
                     }
                     NotifyStateChanged();
-                    return;
+                    return status == GattCommunicationStatus.Success;
                 }
             }
 
@@ -1799,10 +1835,14 @@ public class TrainingStateService : IDisposable
             HrmConnectionStatus = $"Erreur: {ex.Message}";
             NotifyStateChanged();
         }
+        return false;
     }
 
     private void DisconnectHrm()
     {
+        _hrmReconnectCts?.Cancel();
+        _hrmReconnectCts?.Dispose();
+        _hrmReconnectCts = null;
         try
         {
             if (_hrmCharacteristic != null)
@@ -1816,6 +1856,7 @@ public class TrainingStateService : IDisposable
             _hrmDevice = null;
         }
         catch {}
+        HeartRate = 0;
         HrmConnectionStatus = "Déconnecté";
     }
 
@@ -1880,19 +1921,6 @@ public class TrainingStateService : IDisposable
                 LogFan("BluetoothLEDevice creation returned null.");
                 Console.WriteLine($"[Fan BLE] GetBluetoothDeviceAsync returned null device");
                 return;
-            }
-
-            // Check and attempt pairing if needed
-            if (!_fanDevice.DeviceInformation.Pairing.IsPaired)
-            {
-                Console.WriteLine("[Fan BLE] Device is not paired in Windows. Attempting programmatic pairing...");
-                var pairingResult = await _fanDevice.DeviceInformation.Pairing.PairAsync();
-                LogFan($"Pairing result: {pairingResult.Status}.");
-                Console.WriteLine($"[Fan BLE] Programmatic pairing result status: {pairingResult.Status}");
-            }
-            else
-            {
-                Console.WriteLine("[Fan BLE] Device is already paired in Windows.");
             }
 
             Console.WriteLine($"[Fan BLE] Device connected. Querying services...");
