@@ -1,20 +1,27 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# Trainingify
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+Trainingify est une application d’entraînement indoor pour cyclistes. Le site vitrine est une page statique autonome, publiée depuis le dossier [`docs/`](docs/).
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+## Site statique
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+Le site WebSite ne dépend plus d’ASP.NET Core pour être servi. Ouvrir `docs/index.html` dans un navigateur suffit pour le consulter ; aucune installation ni compilation n’est requise. Les interactions du simulateur sont exécutées côté navigateur dans `docs/js/main.js`.
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+Pour GitHub Pages, sélectionner `/docs` comme dossier de publication dans les paramètres Pages, ou utiliser le workflow [`deploy-pages.yml`](.github/workflows/deploy-pages.yml) en sélectionnant **GitHub Actions** comme source.
+
+## Getting Started
+
+Pour développer l’application native, utiliser le projet `src/Trainingify/Trainingify.csproj`.
+
+## Build and Test
+
+Le site statique ne possède pas d’étape de build. Pour le tester localement avec un serveur HTTP :
+
+```powershell
+python -m http.server 8080 --directory docs
+```
+
+Puis ouvrir <http://localhost:8080>.
+
+## Contribute
+
+Les contributions sont les bienvenues. Garder le site publiable sans serveur et conserver les chemins relatifs depuis `docs/index.html`.
