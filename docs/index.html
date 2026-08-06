@@ -286,70 +286,91 @@
                     Une interface sombre, épurée et optimisée pour une lisibilité maximale à haute intensité. Conçue pour être consultée en plein effort, les yeux brouillés par la fatigue.
                 </p>
             </div>
-            
-            <div class="screenshots-grid">
-                
-                <!-- Mockup 1: Dashboard -->
-                <div class="screenshot-card">
-                    <div class="screenshot-header-bar">
-                        <span class="dot-btn green"></span>
-                        <span class="dot-btn yellow"></span>
-                        <span class="dot-btn red"></span>
-                        <span class="mock-title">TRAININGIFY DASHBOARD</span>
-                    </div>
-                    <div class="mockup-container ui-dashboard">
-                        <!-- Simulated dashboard UI using CSS/HTML -->
-                        <div class="mock-ui-header">
-                            <span>SÉANCE ACTIVE : PMA BURST 5x5</span>
-                            <span class="mock-timer">00:34:12</span>
-                        </div>
-                        
-                        <div class="mock-ui-main-metrics">
-                            <div class="metric-box box-power glow-orange">
-                                <span class="lbl">PUISSANCE</span>
-                                <span class="val pulse-text">380</span>
-                                <span class="unit">WATTS</span>
+
+            <div class="screenshot-carousel" data-screenshot-carousel aria-label="Captures de l'application Trainingify">
+                <div class="screenshot-carousel-viewport" role="region" aria-live="polite">
+                    <div class="screenshot-carousel-track" data-carousel-track>
+                        <figure class="carousel-slide is-active">
+                            <div class="actual-screenshot-frame">
+                                <img src="assets/trainingify-dashboard-0.9.1.png" alt="Écran d'accueil Trainingify 0.9.1 avec la progression du cycliste et les statistiques d'entraînement" loading="eager" decoding="async">
                             </div>
-                            <div class="metrics-column">
-                                <div class="metric-box box-hr">
-                                    <span class="lbl">CARDIAQUE</span>
-                                    <span class="val"><i class="fa-solid fa-heart pulse-icon text-red"></i> 178</span>
-                                    <span class="unit">BPM</span>
-                                </div>
-                                <div class="metric-box box-cadence">
-                                    <span class="lbl">CADENCE</span>
-                                    <span class="val">98</span>
-                                    <span class="unit">RPM</span>
-                                </div>
+                            <figcaption class="actual-screenshot-caption">
+                                <span class="preview-overlay-tag"><i class="fa-solid fa-house"></i> Application Windows</span>
+                                <h3>Votre progression, en un coup d'œil</h3>
+                                <p>Le tableau de bord Trainingify rassemble vos séances, votre temps d'entraînement, votre puissance et votre charge cumulée dans une interface claire et immersive.</p>
+                            </figcaption>
+                        </figure>
+
+                        <figure class="carousel-slide">
+                            <div class="actual-screenshot-frame">
+                                <img src="assets/trainingify-training-plan-0.9.1.png" alt="Écran du plan d'entraînement Trainingify avec les séances organisées par semaine" loading="lazy" decoding="async">
                             </div>
-                        </div>
-                        
-                        <div class="mock-ui-graph">
-                            <!-- Interval graph -->
-                            <div class="graph-bar past" style="height: 40%"></div>
-                            <div class="graph-bar past" style="height: 40%"></div>
-                            <div class="graph-bar active glow-red" style="height: 90%; background: var(--gradient-red-yellow);">
-                                <span class="graph-label">ACTUEL</span>
+                            <figcaption class="actual-screenshot-caption">
+                                <span class="preview-overlay-tag"><i class="fa-solid fa-calendar-days"></i> Planification</span>
+                                <h3>Structurez votre progression</h3>
+                                <p>Visualisez vos semaines et vos séances à venir pour garder une trajectoire claire jusqu'à votre objectif.</p>
+                            </figcaption>
+                        </figure>
+
+                        <figure class="carousel-slide">
+                            <div class="actual-screenshot-frame">
+                                <img src="assets/trainingify-workouts-0.9.1.png" alt="Écran Workouts Trainingify avec les métriques et la courbe de puissance d'une séance" loading="lazy" decoding="async">
                             </div>
-                            <div class="graph-bar future" style="height: 30%"></div>
-                            <div class="graph-bar future" style="height: 90%"></div>
-                            <div class="graph-bar future" style="height: 30%"></div>
-                            <div class="graph-bar future" style="height: 40%"></div>
-                        </div>
-                        
-                        <div class="mock-ui-overlay-msg">
-                            <i class="fa-solid fa-triangle-exclamation"></i> INTERVALLE PMA CIBLE : 380W - TENEZ BON !
-                        </div>
-                    </div>
-                    <div class="screenshot-info">
-                        <h3>Console de Pilotage en Course</h3>
-                        <p>Affiche vos métriques vitales en taille XXL. Les couleurs d'arrière-plan reflètent instantanément vos zones FTP pour savoir si vous êtes au-dessus ou en-dessous de la cible d'un simple coup d'œil.</p>
-                        <span class="preview-overlay-tag"><i class="fa-solid fa-crop-simple"></i> Capture d'écran finale en attente de synchronisation</span>
+                            <figcaption class="actual-screenshot-caption">
+                                <span class="preview-overlay-tag"><i class="fa-solid fa-person-biking"></i> Workouts</span>
+                                <h3>Chaque séance, au bon niveau</h3>
+                                <p>Suivez l'intensité, la puissance et les zones d'effort pendant votre workout pour transformer chaque intervalle en progrès.</p>
+                            </figcaption>
+                        </figure>
+
+                        <figure class="carousel-slide">
+                            <div class="actual-screenshot-frame">
+                                <img src="assets/trainingify-super-cols-0.9.1.png" alt="Catalogue Trainingify des parcours de cols réels avec le Tourmalet et le Mont Ventoux" loading="lazy" decoding="async">
+                            </div>
+                            <figcaption class="actual-screenshot-caption">
+                                <span class="preview-overlay-tag"><i class="fa-solid fa-mountain"></i> Super Cols</span>
+                                <h3>Parcourez les vrais cols</h3>
+                                <p>Choisissez un parcours réel et laissez le profil de la route piloter directement la résistance de votre home trainer.</p>
+                            </figcaption>
+                        </figure>
+
+                        <figure class="carousel-slide">
+                            <div class="actual-screenshot-frame">
+                                <img src="assets/trainingify-super-col-detail-0.9.1.png" alt="Détail du parcours du col du Tourmalet avec le profil de pente coloré" loading="lazy" decoding="async">
+                            </div>
+                            <figcaption class="actual-screenshot-caption">
+                                <span class="preview-overlay-tag"><i class="fa-solid fa-chart-area"></i> Profil de pente</span>
+                                <h3>Chaque kilomètre compte</h3>
+                                <p>Anticipez les variations de pente et visualisez l'ascension complète avant de vous lancer dans le défi.</p>
+                            </figcaption>
+                        </figure>
+
+                        <figure class="carousel-slide">
+                            <div class="actual-screenshot-frame">
+                                <img src="assets/trainingify-device-control-0.9.1.png" alt="Écran Device Control Trainingify pour rechercher des capteurs Bluetooth et ANT+" loading="lazy" decoding="async">
+                            </div>
+                            <figcaption class="actual-screenshot-caption">
+                                <span class="preview-overlay-tag"><i class="fa-solid fa-link"></i> Device Control</span>
+                                <h3>Connectez tout votre écosystème</h3>
+                                <p>Recherchez et pilotez vos capteurs, home trainers et périphériques BLE ou ANT+ depuis un seul écran.</p>
+                            </figcaption>
+                        </figure>
                     </div>
                 </div>
 
-                
+                <button type="button" class="carousel-control carousel-control-prev" data-carousel-prev aria-label="Capture précédente">
+                    <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="carousel-control carousel-control-next" data-carousel-next aria-label="Capture suivante">
+                    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                </button>
+
+                <div class="carousel-footer">
+                    <div class="carousel-dots" data-carousel-dots role="tablist" aria-label="Choisir une capture"></div>
+                    <span class="carousel-counter" data-carousel-counter aria-live="polite">1 / 6</span>
+                </div>
             </div>
+
         </div>
     </section>
 
@@ -362,11 +383,11 @@
             </p>
             
             <div class="download-platforms">
-                <a href="#" class="platform-btn">
+                <a href="https://github.com/chouteau/trainingify/releases/latest/download/Trainingify-latest-windows-x64.msi" class="platform-btn" id="windows-download" download>
                     <i class="fa-brands fa-windows platform-icon"></i>
                     <div class="platform-text">
-                        <span>Télécharger pour</span>
-                        <strong>Windows 10 / 11</strong>
+                        <span>Télécharger l'installateur</span>
+                        <strong>Windows 10 / 11 (MSI)</strong>
                     </div>
                 </a>
                 <a href="#" class="platform-btn">

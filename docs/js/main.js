@@ -251,7 +251,131 @@ document.addEventListener('DOMContentLoaded', () => {
         }, duration * 1000);
     }
 
-    // 4. SCROLL REVEAL ANIMATIONS (Intersection Observer)
+    // 4. SCREENSHOT CAROUSEL
+    const screenshotCarousel = document.querySelector('[data-screenshot-carousel]');
+
+    if (screenshotCarousel) {
+        const carouselTrack = screenshotCarousel.querySelector('[data-carousel-track]');
+        const carouselSlides = Array.from(screenshotCarousel.querySelectorAll('.carousel-slide'));
+        const previousButton = screenshotCarousel.querySelector('[data-carousel-prev]');
+        const nextButton = screenshotCarousel.querySelector('[data-carousel-next]');
+        const dotsContainer = screenshotCarousel.querySelector('[data-carousel-dots]');
+        const counter = screenshotCarousel.querySelector('[data-carousel-counter]');
+        const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+
+        let currentSlide = 0;
+        let autoPlayTimer = null;
+        let touchStartX = null;
+
+        carouselSlides.forEach((slide, index) => {
+            slide.setAttribute('aria-hidden', index === 0 ? 'false' : 'true');
+        });
+
+        const dots = carouselSlides.map((_, index) => {
+            const dot = document.createElement('button');
+            dot.type = 'button';
+            dot.className = 'carousel-dot';
+            dot.setAttribute('role', 'tab');
+            dot.setAttribute('aria-label', `Afficher la capture ${index + 1}`);
+            dot.addEventListener('click', () => goToSlide(index));
+            dotsContainer.appendChild(dot);
+            return dot;
+        });
+
+        function renderCarousel() {
+            carouselTrack.style.transform = `translateX(-${currentSlide * 100}%)`;
+
+            carouselSlides.forEach((slide, index) => {
+                const isActive = index === currentSlide;
+                slide.classList.toggle('is-active', isActive);
+                slide.setAttribute('aria-hidden', isActive ? 'false' : 'true');
+            });
+
+            dots.forEach((dot, index) => {
+                const isActive = index === currentSlide;
+                dot.classList.toggle('is-active', isActive);
+                dot.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                dot.tabIndex = isActive ? 0 : -1;
+            });
+
+            if (counter) {
+                counter.textContent = `${currentSlide + 1} / ${carouselSlides.length}`;
+            }
+        }
+
+        function stopAutoPlay() {
+            if (autoPlayTimer) {
+                window.clearInterval(autoPlayTimer);
+                autoPlayTimer = null;
+            }
+        }
+
+        function startAutoPlay() {
+            stopAutoPlay();
+
+            if (!reducedMotion && carouselSlides.length > 1) {
+                autoPlayTimer = window.setInterval(() => {
+                    goToSlide(currentSlide + 1, false);
+                }, 6000);
+            }
+        }
+
+        function goToSlide(index, restartAutoPlay = true) {
+            currentSlide = (index + carouselSlides.length) % carouselSlides.length;
+            renderCarousel();
+
+            if (restartAutoPlay) {
+                startAutoPlay();
+            }
+        }
+
+        previousButton?.addEventListener('click', () => goToSlide(currentSlide - 1));
+        nextButton?.addEventListener('click', () => goToSlide(currentSlide + 1));
+
+        screenshotCarousel.addEventListener('mouseenter', stopAutoPlay);
+        screenshotCarousel.addEventListener('mouseleave', startAutoPlay);
+        screenshotCarousel.addEventListener('focusin', stopAutoPlay);
+        screenshotCarousel.addEventListener('focusout', event => {
+            if (!screenshotCarousel.contains(event.relatedTarget)) {
+                startAutoPlay();
+            }
+        });
+
+        screenshotCarousel.addEventListener('keydown', event => {
+            if (event.key === 'ArrowLeft') {
+                event.preventDefault();
+                goToSlide(currentSlide - 1);
+            } else if (event.key === 'ArrowRight') {
+                event.preventDefault();
+                goToSlide(currentSlide + 1);
+            }
+        });
+
+        screenshotCarousel.addEventListener('touchstart', event => {
+            touchStartX = event.changedTouches[0]?.clientX ?? null;
+            stopAutoPlay();
+        }, { passive: true });
+
+        screenshotCarousel.addEventListener('touchend', event => {
+            if (touchStartX === null) return;
+
+            const touchEndX = event.changedTouches[0]?.clientX ?? touchStartX;
+            const swipeDistance = touchEndX - touchStartX;
+
+            if (Math.abs(swipeDistance) > 45) {
+                goToSlide(currentSlide + (swipeDistance < 0 ? 1 : -1));
+            } else {
+                startAutoPlay();
+            }
+
+            touchStartX = null;
+        }, { passive: true });
+
+        renderCarousel();
+        startAutoPlay();
+    }
+
+    // 5. SCROLL REVEAL ANIMATIONS (Intersection Observer)
     const revealElements = document.querySelectorAll('.feature-card, .ecosystem-content, .ecosystem-visual, .playground-card, .screenshot-card');
     
     if ('IntersectionObserver' in window && revealElements.length > 0) {
