@@ -258,6 +258,31 @@ a {
     text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
 }
 
+.nav-github {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin-left: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 50%;
+    color: var(--color-text-muted);
+    font-size: 1.35rem;
+    transition: var(--transition-smooth);
+}
+
+.nav-github:hover,
+.nav-github:focus-visible {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--color-orange);
+    box-shadow: 0 0 16px rgba(255, 85, 0, 0.28);
+    transform: translateY(-2px);
+    outline: none;
+}
+
 .menu-toggle {
     display: none;
     background: none;
