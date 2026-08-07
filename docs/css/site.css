@@ -1728,6 +1728,218 @@ a {
 
 }
 
+/* ===========================================================================
+   PRIVACY POLICY
+   ========================================================================== */
+
+.legal-page {
+    background:
+        radial-gradient(circle at 78% 8%, rgba(255, 85, 0, 0.12), transparent 28rem),
+        var(--color-bg);
+}
+
+.legal-navbar {
+    background: rgba(11, 12, 16, 0.92);
+}
+
+.legal-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--color-text-muted);
+    font-family: var(--font-heading);
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.legal-back-link:hover,
+.legal-back-link:focus-visible {
+    color: var(--color-orange);
+}
+
+.legal-back-link:focus-visible,
+.legal-contact-link:focus-visible {
+    outline: 2px solid var(--color-orange);
+    outline-offset: 5px;
+}
+
+.legal-main {
+    padding: calc(var(--navbar-height) + 88px) 24px 112px;
+}
+
+.legal-document {
+    width: min(100%, 880px);
+    margin: 0 auto;
+}
+
+.legal-heading {
+    max-width: 760px;
+    margin-bottom: 56px;
+}
+
+.legal-kicker {
+    margin-bottom: 14px;
+    color: var(--color-orange);
+    font-family: var(--font-heading);
+    font-size: 0.86rem;
+    font-weight: 800;
+}
+
+.legal-heading h1 {
+    max-width: 12ch;
+    margin-bottom: 22px;
+    font-size: clamp(2.8rem, 7vw, 5.2rem);
+    line-height: 0.98;
+    letter-spacing: -0.035em;
+}
+
+.legal-intro {
+    max-width: 65ch;
+    color: #d5d7dc;
+    font-size: clamp(1.05rem, 2vw, 1.25rem);
+    line-height: 1.7;
+}
+
+.legal-date {
+    margin-top: 18px;
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+}
+
+.privacy-summary {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 22px;
+    margin-bottom: 64px;
+    padding: 28px;
+    border: 1px solid rgba(255, 85, 0, 0.35);
+    border-radius: 14px;
+    background: rgba(255, 85, 0, 0.07);
+}
+
+.privacy-summary-icon {
+    display: flex;
+    width: 48px;
+    height: 48px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: var(--color-orange);
+    color: #111216;
+    font-size: 1.25rem;
+}
+
+.privacy-summary h2 {
+    margin-bottom: 8px;
+    font-size: 1.35rem;
+}
+
+.privacy-summary p {
+    max-width: 65ch;
+    color: #dedfe3;
+}
+
+.legal-content {
+    max-width: 74ch;
+}
+
+.legal-content section {
+    margin-bottom: 52px;
+    scroll-margin-top: calc(var(--navbar-height) + 32px);
+}
+
+.legal-content h2 {
+    margin-bottom: 16px;
+    font-size: clamp(1.35rem, 3vw, 1.75rem);
+    line-height: 1.25;
+}
+
+.legal-content p,
+.legal-content li {
+    color: #c5c7cd;
+    font-size: 0.98rem;
+    line-height: 1.85;
+}
+
+.legal-content p + p {
+    margin-top: 14px;
+}
+
+.legal-content ul {
+    margin: 16px 0 18px 1.15rem;
+}
+
+.legal-content li {
+    margin-bottom: 9px;
+    padding-left: 8px;
+}
+
+.legal-content li::marker {
+    color: var(--color-orange);
+}
+
+.legal-contact-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 22px;
+    color: var(--color-orange);
+    font-family: var(--font-heading);
+    font-weight: 800;
+}
+
+.legal-contact-link:hover {
+    color: var(--color-yellow);
+}
+
+.legal-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    background: #06070a;
+    padding: 36px 0;
+}
+
+.legal-footer .container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+}
+
+.legal-footer-logo {
+    margin: 0;
+}
+
+.legal-footer p {
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+}
+
+@media (max-width: 640px) {
+    .legal-main {
+        padding-top: calc(var(--navbar-height) + 56px);
+        padding-bottom: 80px;
+    }
+
+    .legal-heading {
+        margin-bottom: 40px;
+    }
+
+    .privacy-summary {
+        grid-template-columns: 1fr;
+        margin-bottom: 48px;
+        padding: 22px;
+    }
+
+    .legal-content section {
+        margin-bottom: 42px;
+    }
+
+    .legal-footer .container {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
 @media (max-width: 768px) {
     .menu-toggle {
         display: block;
