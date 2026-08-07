@@ -47,9 +47,24 @@
         <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
     </PropertyGroup>
 
-    <PropertyGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <!-- Keep local Windows development unpackaged for a fast F5/dotnet run cycle. -->
+    <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows' and '$(Configuration)' == 'Debug'">
         <WindowsPackageType>None</WindowsPackageType>
         <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    </PropertyGroup>
+
+    <!-- Release builds are packaged with the identity reserved in Microsoft Store. -->
+    <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows' and '$(Configuration)' == 'Release'">
+        <WindowsPackageType>MSIX</WindowsPackageType>
+        <ApplicationVersion>0</ApplicationVersion>
+        <AppxPackageVersion>$(ApplicationDisplayVersion).0</AppxPackageVersion>
+        <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
+        <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    </PropertyGroup>
+
+    <!-- Required by the Windows App SDK when publishing with a portable .NET 10 RID. -->
+    <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows' and '$(RuntimeIdentifierOverride)' != ''">
+        <RuntimeIdentifier>$(RuntimeIdentifierOverride)</RuntimeIdentifier>
     </PropertyGroup>
 
     <ItemGroup>
