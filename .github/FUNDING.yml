@@ -1,3 +1,4 @@
 # These are supported funding model platforms
 
-custom: ['https://paypal.me/MARCCHOUTEAU?locale.x=fr_FR&country.x=FR']
+custom: 
+  - "https://paypal.me/MARCCHOUTEAU"
