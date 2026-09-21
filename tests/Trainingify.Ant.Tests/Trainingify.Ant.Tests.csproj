@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="LibUsbDotNet" Version="2.2.85" />
+    <Compile Include="../../src/Trainingify/Services/AntHeartRateProtocol.cs" Link="AntHeartRateProtocol.cs" />
+    <Compile Include="../../src/Trainingify/Services/AntHeartRateReceiver.cs" Link="AntHeartRateReceiver.cs" />
+  </ItemGroup>
+</Project>

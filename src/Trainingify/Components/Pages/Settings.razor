@@ -42,18 +42,19 @@
     {
         <button class="btn btn-warning w-100 fw-bold py-2 text-dark" style="border-radius: 12px;" disabled>
             <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            RECHERCHE DE CAPTEURS EN COURS (BLE & ANT+)...
+            RECHERCHE DE CAPTEURS EN COURS (BLE & CARDIO ANT+)...
         </button>
     }
     else
     {
         <button class="btn btn-outline-warning w-100 fw-bold py-2" @onclick='() => Scan("All")' style="border-radius: 12px; border-color: #ffd60a; color: #ffd60a;">
-            <i class="bi bi-search me-2"></i> RECHERCHER DES CAPTEURS (BLE & ANT+)
+            <i class="bi bi-search me-2"></i> RECHERCHER DES CAPTEURS (BLE & CARDIO ANT+)
         </button>
     }
 </div>
 
 <!-- Device list -->
+<p class="small text-secondary" role="status">@StateService.AntConnectionStatus</p>
 <div class="devices-list">
     <!-- Controllable Smart Trainer -->
     <div class="device-row align-items-start">
@@ -109,7 +110,7 @@
                         </span>
                         <span>Hr: @StateService.HeartRate bpm</span>
                         <div class="alert alert-info mt-2 p-2 border border-info bg-dark text-info" style="font-size: 11px; font-family: monospace; word-break: break-all; border-radius: 8px;">
-                            <strong>TRAME BLUETOOTH REÇUE :</strong><br/>
+                            <strong>ÉTAT DU SIGNAL CARDIO :</strong><br/>
                             @StateService.HrmConnectionStatus
                         </div>
                     }

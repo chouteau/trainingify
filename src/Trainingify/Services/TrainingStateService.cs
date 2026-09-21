@@ -29,6 +29,7 @@ public class TrainingStateService : IDisposable
 
 #if WINDOWS
     private BluetoothLEAdvertisementWatcher? _watcher;
+    private readonly AntHeartRateReceiver _antHeartRate = new();
     private BluetoothLEDevice? _controllableDevice;
     private GattCharacteristic? _ftmsCharacteristic;
     private GattCharacteristic? _controlPointCharacteristic;
@@ -67,6 +68,7 @@ public class TrainingStateService : IDisposable
 
     public string ControllableConnectionStatus { get; private set; } = "Déconnecté";
     public string HrmConnectionStatus { get; private set; } = "Déconnecté";
+    public string AntConnectionStatus { get; private set; } = "ANT+ cardio : lancez la recherche avec votre clé USB branchée";
 
     // User Profile
     public UserProfile Profile { get; private set; } = new();
@@ -144,6 +146,7 @@ public class TrainingStateService : IDisposable
     }
 
     private double _targetPower = 200;
+    private double _routeGradePercent;
     public double TargetPower
     {
         get => _targetPower;
@@ -167,7 +170,7 @@ public class TrainingStateService : IDisposable
         _isErgModeEnabled = false;
         _isPowerSlopeEnabled = false;
         _targetMode = "SLOPE";
-        _targetPower = Math.Clamp(gradePercent, MinimumSimulatedGradePercent, MaximumSimulatedGradePercent);
+        _routeGradePercent = Math.Clamp(gradePercent, MinimumSimulatedGradePercent, MaximumSimulatedGradePercent);
 #if WINDOWS
         await UpdateTrainerTargetAsync();
 #endif
@@ -422,6 +425,41 @@ public class TrainingStateService : IDisposable
     public TrainingStateService(IDbContextFactory<TrainingifyDbContext> dbFactory)
     {
         _dbFactory = dbFactory;
+#if WINDOWS
+        _antHeartRate.Measurement += (number, bpm) => MainThread.BeginInvokeOnMainThread(() =>
+        {
+            var address = $"ANT:{number}";
+            if (!DiscoveredDevices.Any(d => d.Address == address && d.DeviceType == "HRM"))
+            {
+                DiscoveredDevices.Add(new DiscoveredDevice { Name = $"Cardio ANT+ {number}", Address = address,
+                    DeviceType = "HRM", Protocol = "ANT+" });
+                if (!HrmConnected) SelectedHrmId = address;
+            }
+            AntConnectionStatus = $"ANT+ : cardio {number} reçu ({bpm} bpm)";
+            if (HrmConnected && SelectedHrmId == address)
+            {
+                HeartRate = bpm;
+                HrmConnectionStatus = $"Connecté (ANT+) — {bpm} bpm";
+                lock (HeartRateHistory)
+                {
+                    HeartRateHistory.Add(bpm);
+                    if (HeartRateHistory.Count > 60) HeartRateHistory.RemoveAt(0);
+                }
+            }
+            NotifyStateChanged();
+        });
+        _antHeartRate.Status += status => MainThread.BeginInvokeOnMainThread(() =>
+        {
+            Console.WriteLine(status);
+            AntConnectionStatus = status;
+            if (HrmConnected && AntHeartRateProtocol.TryParseAddress(SelectedHrmId, out _))
+            {
+                HeartRate = 0;
+                HrmConnectionStatus = status;
+            }
+            NotifyStateChanged();
+        });
+#endif
         InitializeAsync().ConfigureAwait(false);
     }
 
@@ -454,7 +492,8 @@ public class TrainingStateService : IDisposable
             var savedDevices = await context.ConnectedDevices.ToListAsync();
             foreach (var device in savedDevices)
             {
-                if (string.IsNullOrEmpty(device.Address) || !IsValidBluetoothAddress(device.Address))
+                if (string.IsNullOrEmpty(device.Address) || !(IsValidBluetoothAddress(device.Address)
+                    || (device.DeviceType == "HRM" && AntHeartRateProtocol.TryParseAddress(device.Address, out _))))
                 {
                     if (device.IsEnabled)
                     {
@@ -472,7 +511,7 @@ public class TrainingStateService : IDisposable
                         Name = device.Name,
                         Address = device.Address,
                         DeviceType = device.DeviceType,
-                        Protocol = "Bluetooth",
+                        Protocol = AntHeartRateProtocol.TryParseAddress(device.Address, out _) ? "ANT+" : "Bluetooth",
                         Rssi = -60
                     });
                 }
@@ -820,7 +859,8 @@ public class TrainingStateService : IDisposable
         if (_hrmCharacteristic != null) isRealHrm = true;
 #endif
 
-        var hasSelectedBluetoothHrm = IsValidBluetoothAddress(SelectedHrmId);
+        var hasSelectedBluetoothHrm = IsValidBluetoothAddress(SelectedHrmId)
+            || AntHeartRateProtocol.TryParseAddress(SelectedHrmId, out _);
         if (HrmConnected && !isRealHrm && !hasSelectedBluetoothHrm)
         {
             // Heart rate rises with higher power
@@ -1081,7 +1121,7 @@ public class TrainingStateService : IDisposable
     public string GetDeviceProtocol(string deviceType, string address)
     {
         var dev = DiscoveredDevices.FirstOrDefault(d => d.Address == address && d.DeviceType == deviceType);
-        return dev?.Protocol ?? "Bluetooth";
+        return dev?.Protocol ?? (AntHeartRateProtocol.TryParseAddress(address, out _) ? "ANT+" : "Bluetooth");
     }
 
     public string GetDeviceName(string deviceType, string address)
@@ -1098,8 +1138,17 @@ public class TrainingStateService : IDisposable
         NotifyStateChanged();
 
 #if WINDOWS
+        if (protocol is "All" or "ANT+")
+        {
+            // Keep an explicitly connected sensor paired when refreshing the list.
+            var number = HrmConnected && AntHeartRateProtocol.TryParseAddress(SelectedHrmId, out var selected)
+                ? selected : (ushort)0;
+            _antHeartRate.Start(number);
+        }
         try
         {
+            if (protocol is "All" or "Bluetooth" or "BLE")
+            {
             _watcher = new BluetoothLEAdvertisementWatcher
             {
                 ScanningMode = BluetoothLEScanningMode.Active
@@ -1113,6 +1162,9 @@ public class TrainingStateService : IDisposable
             _watcher.Stop();
             _watcher.Received -= OnAdvertisementReceived;
             _watcher = null;
+            }
+            // ANT+ may take longer than a BLE advertisement; its receiver stays active.
+            if (protocol is "All" or "ANT+") await Task.Delay(7000);
         }
         catch (Exception ex)
         {
@@ -1526,9 +1578,17 @@ public class TrainingStateService : IDisposable
             }
             else if (_targetMode == "SLOPE")
             {
-                // Target Inclination (Opcode 0x03, sint16 en dixièmes de pourcent 0.1%)
-                short inclination = (short)Math.Clamp(Math.Round(_targetPower * 10), -200, 200); // Clampe entre -20% et +20%
-                payload = new byte[] { 0x03, (byte)(inclination & 0xFF), (byte)((inclination >> 8) & 0xFF) };
+                // Indoor Bike Simulation Parameters (0x11) makes the trainer leave ERG mode,
+                // applies grade-dependent resistance and drives the KICKR BIKE inclination.
+                // Grade is encoded in hundredths of a percent (sint16).
+                short grade = (short)Math.Round(_routeGradePercent * 100.0);
+                payload = new byte[]
+                {
+                    0x11,
+                    0x00, 0x00,
+                    (byte)(grade & 0xFF), (byte)((grade >> 8) & 0xFF),
+                    0x00, 0x00
+                };
             }
             else if (_targetMode == "RESISTANCE")
             {
@@ -1543,7 +1603,8 @@ public class TrainingStateService : IDisposable
 
             var buffer = payload.AsBuffer();
             var status = await _controlPointCharacteristic.WriteValueAsync(buffer, GattWriteOption.WriteWithResponse);
-            Console.WriteLine($"[Trainer Control] Consigne envoyée - Opcode 0x{payload[0]:X2}, Mode : {_targetMode}, Valeur : {_targetPower}, Résultat Bluetooth : {status}");
+            var targetValue = _targetMode == "SLOPE" ? _routeGradePercent : _targetPower;
+            Console.WriteLine($"[Trainer Control] Consigne envoyée - Opcode 0x{payload[0]:X2}, Mode : {_targetMode}, Valeur : {targetValue}, Résultat Bluetooth : {status}");
         }
         catch (Exception ex)
         {
@@ -1803,6 +1864,14 @@ public class TrainingStateService : IDisposable
 
     private async void ConnectHrmAsync()
     {
+        if (AntHeartRateProtocol.TryParseAddress(SelectedHrmId, out var number))
+        {
+            _antHeartRate.Start(number);
+            HrmConnectionStatus = "ANT+ : connexion au cardio…";
+            NotifyStateChanged();
+            return;
+        }
+        _antHeartRate.Stop();
         _hrmReconnectCts?.Cancel();
         _hrmReconnectCts?.Dispose();
         _hrmReconnectCts = new CancellationTokenSource();
@@ -1913,6 +1982,7 @@ public class TrainingStateService : IDisposable
 
     private void DisconnectHrm()
     {
+        _antHeartRate.Stop();
         _hrmReconnectCts?.Cancel();
         _hrmReconnectCts?.Dispose();
         _hrmReconnectCts = null;
@@ -2752,6 +2822,7 @@ public class TrainingStateService : IDisposable
 #if WINDOWS
         DisconnectControllable();
         DisconnectHrm();
+        _antHeartRate.Dispose();
         DisconnectFan();
 #endif
     }

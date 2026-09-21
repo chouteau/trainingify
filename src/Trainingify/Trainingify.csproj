@@ -85,6 +85,9 @@
         <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
+    <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">
+        <PackageReference Include="LibUsbDotNet" Version="2.2.85" />
+    </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Garmin.FIT.Sdk" Version="21.205.0" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />

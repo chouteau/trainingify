@@ -58,7 +58,10 @@ else
                     <svg:text x="@segment.X2" y="248" class="profile-axis-label" text-anchor="middle">@segment.Kilometer</svg:text>
                 }
                 <line x1="45" x2="990" y1="230" y2="230" class="profile-axis" />
-                <line x1="@(45 + Engine.ProgressPercent * 9.45)" x2="@(45 + Engine.ProgressPercent * 9.45)" y1="8" y2="230" class="profile-cursor"/>
+                <g class="profile-position" role="img" aria-label="Position actuelle : @(((Engine.Position?.DistanceMeters ?? 0) / 1000).ToString("F2")) km">
+                    <line x1="@ProfileCursorX" x2="@ProfileCursorX" y1="8" y2="230" class="profile-cursor-outline" />
+                    <line x1="@ProfileCursorX" x2="@ProfileCursorX" y1="8" y2="230" class="profile-cursor" />
+                </g>
             </svg>
             <span class="profile-distance-title">DISTANCE (KM)</span>
         </div>
@@ -105,6 +108,8 @@ else
     private double ProfileMax => Math.Ceiling(Engine.Route!.Points.Max(p => p.ElevationMeters) / 100) * 100;
     private IEnumerable<int> AltitudeGrid { get { for (var value = (int)ProfileMin; value <= ProfileMax; value += 200) yield return value; } }
     private double ProfileX(double distance) => 45 + distance / Engine.Route!.DistanceMeters * 945;
+    private string ProfileCursorX => ProfileX(Math.Clamp(Engine.Position?.DistanceMeters ?? 0, 0, Engine.Route!.DistanceMeters))
+        .ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
     private double ProfileY(double elevation) => 225 - (elevation - ProfileMin) / Math.Max(1, ProfileMax - ProfileMin) * 205;
     private IReadOnlyList<ProfileSegment> ProfileSegments
     {
