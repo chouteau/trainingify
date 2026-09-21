@@ -22,7 +22,7 @@
 .super-climb-page .profile-grade-label{font-size:17px;stroke-width:4px}
 
 .super-climb-page .elevation-panel{position:relative;height:clamp(340px,calc(100dvh - 475px),640px);min-height:340px;padding:12px 10px 28px;background:#f4f6f8;border-color:#d8dde3;color:#142033}
-.super-climb-page .elevation-panel svg{display:block;width:100%;height:calc(100% - 8px);overflow:visible}
+.super-climb-page .elevation-panel svg{display:block;width:100%;height:calc(100% - 8px);overflow:hidden}
 .profile-legend{position:absolute;z-index:2;top:7px;right:10px;display:flex;border:1px solid #7f8893;border-radius:4px;overflow:hidden;background:#fff}
 .profile-legend span{padding:3px 8px;font-size:8px;font-weight:900}.grade-easy{color:#65b32e}.grade-steady{color:#1596d2}.grade-hard{color:#e69d00}.grade-very-hard{color:#f21b12}.grade-extreme{color:#25282d}
 .profile-grid{stroke:#cbd1d8;stroke-width:1;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}.profile-axis{stroke:#172334;stroke-width:2;vector-effect:non-scaling-stroke}.profile-axis-label{fill:#566170;font-size:12px;font-weight:700}.profile-segment{stroke:#f4f6f8;stroke-width:1.5;vector-effect:non-scaling-stroke}.profile-km-line{stroke:rgba(255,255,255,.75);stroke-width:1;vector-effect:non-scaling-stroke}.profile-grade-label{font-size:11px;font-weight:900;paint-order:stroke;stroke:#f4f6f8;stroke-width:3px;stroke-linejoin:round;fill:#172334}.profile-distance-title{position:absolute;bottom:3px;left:45%;font-size:9px;font-weight:900;color:#263244;letter-spacing:.06em}

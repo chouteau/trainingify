@@ -117,7 +117,10 @@ else
                 var start = PointAt(startDistance); var end = PointAt(endDistance);
                 var grade = (end.ElevationMeters - start.ElevationMeters) / Math.Max(1, endDistance - startDistance) * 100;
                 var x1=ProfileX(startDistance); var x2=ProfileX(endDistance); var y1=ProfileY(start.ElevationMeters); var y2=ProfileY(end.ElevationMeters);
-                result.Add(new($"{x1:F1},{y1:F1} {x2:F1},{y2:F1} {x2:F1},230 {x1:F1},230", grade, (x1+x2)/2, Math.Min(y1,y2)-7, x2, y2, kilometer));
+                var points = string.Create(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    $"{x1:F1},{y1:F1} {x2:F1},{y2:F1} {x2:F1},230 {x1:F1},230");
+                result.Add(new(points, grade, (x1+x2)/2, Math.Min(y1,y2)-7, x2, y2, kilometer));
                 startDistance=endDistance; kilometer++;
             }
             return result;
